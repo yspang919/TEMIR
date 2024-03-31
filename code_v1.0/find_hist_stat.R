@@ -1,16 +1,19 @@
 ################################################################################
 ### Module for calculating statistics of default hourly output data in nc files
+### or in "hist_grid" in the debugging mode.
 ################################################################################
 
-# Function to find daily statistics (e.g., mean, max, min) from default hourly output data in nc files:
+# Last updated: Apr 2020 (Tai)
+
+################################################################################
+### Functions for handling nc data:
+################################################################################
 
 library(ncdf4)
-library(fields)
-library(maps)
-load('~/Desktop/TEMIR/PFT_frac.RData')
-load("~/Dropbox/TGABI/R/functions.RData")
 
-f_daily_stat = function(hist_name, start_date, end_date, varid, FUN=mean, hist_data_dir='~/Desktop/TEMIR/Cluster_outputs/') {
+# Function to find daily statistics (e.g., mean, max, min) from default hourly output data in nc files or in "hist_grid" in the debugging mode.
+
+f_daily_stat = function(hist_data_dir, start_date, end_date, varid, FUN=mean) {
   
   # This function requires external functions: make.date.vec (from "tools.R")
   # This function requires R packages: ncdf4
@@ -22,7 +25,7 @@ f_daily_stat = function(hist_name, start_date, end_date, varid, FUN=mean, hist_d
   n_day = length(date_vec)
   
   # Define new data array:
-  filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(start_date), '.nc')
+  filename = paste0(hist_data_dir, 'hist_grid_', as.character(start_date), '.nc')
   nc = nc_open(filename)
   lon = ncvar_get(nc, varid='lon')
   lat = ncvar_get(nc, varid='lat')
@@ -38,7 +41,7 @@ f_daily_stat = function(hist_name, start_date, end_date, varid, FUN=mean, hist_d
     
     # Extract nc file:
     hist_hourly = array(NaN, dim=c(length(lon), length(lat), length(pft), length(hour)))
-    filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(date_vec[d]), '.nc')
+    filename = paste0(hist_data_dir, 'hist_grid_', as.character(date_vec[d]), '.nc')
     nc = nc_open(filename)
     hist_hourly[,,,] = ncvar_get(nc, varid=varid)
     nc_close(nc)
@@ -52,105 +55,11 @@ f_daily_stat = function(hist_name, start_date, end_date, varid, FUN=mean, hist_d
   
 }
 
-#global_2010_LAI = f_daily_stat('hist_data_2010_global_LAI', 20100101, 20101231, 'A_can')
-
-hist_data_dir = '~/Desktop/TEMIR/Cluster_outputs/'
-hist_name = 'hist_data_2010_global_LAI'
-start_date = 20100101
-end_date = 20101231
-date_vec = make.date.vec(start.date=start_date, end.date=end_date)
-n_day = length(date_vec)
-
-
-filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(start_date), '.nc')
-nc = nc_open(filename)
-lon = ncvar_get(nc, varid='lon')
-lat = ncvar_get(nc, varid='lat')
-pft = ncvar_get(nc, varid='pft')
-hour = ncvar_get(nc, varid='hour')
-nc_close(nc)
-
-grid_area = matrix(NaN, nrow=length(lon), ncol=length(lat))
-for (i in 1:length(lon)) {
-  for (j in 1:length(lat)) {
-    grid_area[i,j] = area.latlon(lat[j]-2/2, lon[i]-2.5/2, lat[j]+2/2, lon[i]+2.5/2)
-  }
-}
-grid_area_flip <- t(grid_area[nrow(grid_area):1,])
-
-global_2010_LAI_total = array(NaN, dim=c(length(lon), length(lat), length(1:n_day), length(pft)))
-for (d in 1:n_day) {
-  for (ipft in 1:length(pft)) {
-    global_2010_LAI_total[, , d, ipft] = global_2010_LAI[, , d, ipft]*grid_area[ , ]
-  }
-}
-
-global_2010_LAI_GPP_daily = array(NaN, dim=c(length(lon), length(lat), length(1:n_day)))
-for (d in 1:n_day) {
-  global_2010_LAI_GPP_daily [, , d] = apply(global_2010_LAI_total [, , d, ] * PFT_frac, 1:2, sum, na.rm = TRUE)
-}
-
-global_2010_1.1_GPP_mean = apply (global_2010_1.1_GPP_daily, 1:2, mean) / grid_area * 1.03775
-filename = '~/Desktop/CUHK/GOPT.2010_GPP/2010_GPP_mean.RData'
-save (list = 'global_2010_debug_GPP_mean', file = filename)
-load('~/Desktop/CUHK/GOPT.2010_GPP/2010_GPP_mean.RData')
-filename = '~/Desktop/CUHK/GOPT.2010_GPP/observed_GPP_plot.RData'
-save(list = 'GPP_2010', file = filename)
-global_2010_total_obs_Dec = GPP_Dec * grid_area_flip * 1000000 * 31
-sum_GPP_Dec = sum(global_2010_total_obs_Dec[,], na.rm = T)
-load ('~/Desktop/CUHK/GOPT.2010_GPP/observed_GPP_plot.RData')
-GPP_2010_diff_1.1 = global_2010_debug_GPP_mean - global_2010_1.1_GPP_mean 
-plot.field(spdata = GPP_2010_diff_1.1, lon.map = lon, lat.map = lat, type = 'sign', Pacific.centric = F)
-GPP_2010_diff_1.1_perc = (global_2010_debug_GPP_mean - global_2010_1.1_GPP_mean)/global_2010_1.1_GPP_mean * 100
-#GPP_2010_diff_1.1_perc <- ifelse(test = GPP_2010_diff_1.1_perc >= 100, yes = NaN, no = GPP_2010_diff_1.1_perc)
-plot.field(spdata = GPP_2010_diff_1.1_perc, lon.map = lon, lat.map = lat, type = 'sign', zlim = c(-100, 100), Pacific.centric = F)
-# For GOPT observed data
-f_monthly_stat = function(start_date, end_date, varid, observed_data_dir='~/Desktop/CUHK/GOPT.2010_GPP/') {
-    
-    # Vector of simulation dates:
-    date_vec = make.date.vec(start.date=start_date, end.date=end_date)
-    # Number of simulation days:
-    n_day = length(date_vec)
-    
-    # Define new data array:
-    filename = paste0(observed_data_dir, '/GOPT.gosat.', 201012, '.2.5x2.nc')
-    nc = nc_open(filename)
-    lon = ncvar_get(nc, varid='lon')
-    lat = ncvar_get(nc, varid='lat')
-    GPP_Dec = ncvar_get(nc, varid='GPO')
-    nc_close(nc)
-    hist_daily = array(NaN, dim=c(length(lon), length(lat), 12))
-    
-sum_GPP_2010 = sum_GPP_Jan + sum_GPP_Feb + sum_GPP_Mar + sum_GPP_Apr + sum_GPP_May + sum_GPP_Jun + sum_GPP_Jul + sum_GPP_Aug + sum_GPP_Sep + sum_GPP_Oct + sum_GPP_Nov + sum_GPP_Dec
-GPP_2010 = (GPP_Jan*31 + GPP_Feb*28 + GPP_Mar*31 + GPP_Apr*30 + GPP_May*31 + GPP_Jun*30 + GPP_Jul*31 + GPP_Aug*31 + GPP_Sep*30 + GPP_Oct*31 + GPP_Nov*30 + GPP_Dec*31)/365
-GPP_2010 = apply(t(GPP_2010), 2, rev)
-GPP_2010 = GPP_2010[c(144:1), , drop = F]
-filename = '~/Desktop/CUHK/GOPT.2010_GPP/observed_GPP_plot.RData'
-save(list = 'GPP_2010', file = filename)
-filename = '~/Desktop/CUHK/GOPT.2010_GPP/2010_GPP.RData'
-save(list = 'sum_GPP_2010', file = filename)
-
-    # Looping over months:
-    for (d in 1:12) {
-      
-      print(paste0('Processing ', varid, ' for date = ', as.character(date_vec[d])), quote=FALSE)
-      
-      # Extract nc file:
-      hist_monthly= array(NaN, dim=c(length(lon), length(lat), length(pft))
-      filename = paste0('/hist_grid_', as.character(date_vec[d]), '.nc')
-      nc = nc_open(filename)
-      hist_monthly[,,] = ncvar_get(nc, varid=varid)
-      nc_close(nc)
-  
-    return(hist_daily)
-    
-  }
-
 ################################################################################
 
 # Function to find monthly mean from default hourly output data in nc files, including the option to sum over all PFTs:
 
-f_monthly_mean = function(hist_name, start_date, end_date, varid, PFT_sum=FALSE, PFT_frac=NULL, hist_data_dir='~/TGABI/Tai/TEMIR/hist_data/') {
+f_monthly_mean = function(hist_data_dir, start_date, end_date, varid, PFT_sum=FALSE, PFT_frac=NULL) {
    
    # This function requires external functions: make.date.vec (from "tools.R")
    # This function requires R packages: ncdf4
@@ -158,6 +67,7 @@ f_monthly_mean = function(hist_name, start_date, end_date, varid, PFT_sum=FALSE,
    # Therefore, "start_date" should always be the first day of a given month, and "end_date" should be the last day of a given month.
    # If "PFT_sum=TRUE", weighted sum over all PFTs (weighted by "PFT_frac") will be calculated.
    # "PFT_frac": dim1 = lon; dim2 = lat; dim3 = pft
+   # In most cases, "PFT_frac" here should be the entirety or a subset of the variable "PFT_frac" stored in surface data file "TEMIR_inputs/processed_surf_data/surf_data_regrid_2000.RData".
    
    # Vector of simulation months:
    date_vec = make.date.vec(start.date=start_date, end.date=end_date)
@@ -166,7 +76,7 @@ f_monthly_mean = function(hist_name, start_date, end_date, varid, PFT_sum=FALSE,
    n_month = length(month_vec)
    
    # Define new data array:
-   filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(start_date), '.nc')
+   filename = paste0(hist_data_dir, 'hist_grid_', as.character(start_date), '.nc')
    nc = nc_open(filename)
    lon = ncvar_get(nc, varid='lon')
    lat = ncvar_get(nc, varid='lat')
@@ -187,7 +97,7 @@ f_monthly_mean = function(hist_name, start_date, end_date, varid, PFT_sum=FALSE,
       for (d in 1:length(date_vec_sub)) {
          # Extract nc file:
          ind_hr = ((d - 1)*length(hour) + 1):((d - 1)*length(hour) + length(hour))
-         filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(date_vec_sub[d]), '.nc')
+         filename = paste0(hist_data_dir, 'hist_grid_', as.character(date_vec_sub[d]), '.nc')
          nc = nc_open(filename)
          hist_hourly[,,,ind_hr] = ncvar_get(nc, varid=varid)
          nc_close(nc)
@@ -212,12 +122,11 @@ f_monthly_mean = function(hist_name, start_date, end_date, varid, PFT_sum=FALSE,
 # timestamp()
 # # It requires ~100 seconds to finish 3 months.
 
-
 ################################################################################
 
 # Function to find monthly mean of any daily statistic (e.g., daily max, min) from default hourly output data in nc files:
 
-f_monthly_mean_stat = function(hist_name, start_date, end_date, varid, FUN=max, hist_data_dir='~/TGABI/Tai/TEMIR/hist_data/') {
+f_monthly_mean_stat = function(hist_data_dir, start_date, end_date, varid, FUN=max) {
 
    # This function requires external functions: make.date.vec (from "tools.R"), f_daily_stat
    # This function requires R packages: ncdf4
@@ -231,7 +140,7 @@ f_monthly_mean_stat = function(hist_name, start_date, end_date, varid, FUN=max, 
    n_month = length(month_vec)
 
    # Define new data array:
-   filename = paste0(hist_data_dir, hist_name, '/hist_grid_', as.character(start_date), '.nc')
+   filename = paste0(hist_data_dir, 'hist_grid_', as.character(start_date), '.nc')
    nc = nc_open(filename)
    lon = ncvar_get(nc, varid='lon')
    lat = ncvar_get(nc, varid='lat')
@@ -243,7 +152,7 @@ f_monthly_mean_stat = function(hist_name, start_date, end_date, varid, FUN=max, 
    for (m in 1:n_month) {
       # Find daily statistic for each month:
       date_vec_sub = date_vec[which(floor(date_vec/1e2) == floor(month_vec[m]/1e2))]
-      hist_daily = f_daily_stat(hist_name=hist_name, start_date=date_vec_sub[1], end_date=tail(date_vec_sub, 1), varid=varid, FUN=FUN, hist_data_dir=hist_data_dir)
+      hist_daily = f_daily_stat(hist_data_dir=hist_data_dir, start_date=date_vec_sub[1], end_date=tail(date_vec_sub, 1), varid=varid, FUN=FUN)
       # Find monthly mean of daily statistic:
       hist_monthly[,,m,] = apply(hist_daily, MARGIN=c(1,2,4), FUN=mean, na.rm=TRUE)
    }
@@ -257,6 +166,79 @@ f_monthly_mean_stat = function(hist_name, start_date, end_date, varid, FUN=max, 
 # timestamp()
 # # It requires ~390 seconds to finish 3 months.
 
+
+################################################################################
+### Functions for analyzing "hist_grid" in debugging mode:
+################################################################################
+
+# Function to find daily mean (weighted by PFT fraction over all PFTs) for variables "A_can", "R_can" or "g_can" from "hist_grid":
+
+f_daily_PFT_sum = function(hist_grid, var.name='A_can') {
+   # Only works for variables "A_can", "R_can" or "g_can".
+   if (var.name == 'A_can') {
+      ivar = 1
+   } else if (var.name == 'R_can') {
+      ivar = 2
+   } else if (var.name == 'g_can') {
+      ivar = 3
+   } else { stop('Variable defined is not valid for this function!') }
+   var_daily = array(NaN, dim=c(length(ind_lon), length(ind_lat), n_day_sim))
+   for (n_i in 1:length(ind_lon)) {
+      for (n_j in 1:length(ind_lat)) {
+         PFT_frac_ij = PFT_frac[ind_lon[n_i],ind_lat[n_j],]
+         for (d in 1:n_day_sim) {
+            # Find daily mean first:
+            var_daily_PFT = apply(hist_grid[n_i,n_j,d,,,ivar], MARGIN=1, FUN=mean, na.rm=TRUE)
+            # Find weighted sum over all PFTs:
+            var_daily[n_i,n_j,d] = sum(PFT_frac_ij*var_daily_PFT, na.rm=TRUE)
+         }
+      }
+   }
+   return(var_daily)
+}
+
+# Function to find weighted sum over all PFTs for any PFT-level data array:
+
+f_PFT_sum = function(X, PFT_frac=PFT_frac, PFT_dim) {
+   # "X" is any multidimensional data array with at least three dimensions for at least longitude, latitude and PFT. The first dimension has to be longitude, and the second dimension has to be latitude. Maximum number of dimensions is six.
+   # "PFT_frac" is a three-dimensional array with 1st dim being longitude, 2nd dim being latitude, and 3rd dim being PFT, containing the fractional coverage of different PFTs over the entire grid cell (not land only).
+   # "lon_dim", "lat_dim" and "PFT_dim" are the n-th dimensions for longitude, latitude and PFT, respectiviely, of "X".
+   dim_X = dim(X)
+   if (PFT_dim > length(dim_X) | PFT_dim == 1 | PFT_dim == 2) stop("PFT_dim is not correctly specified!")
+   if (length(dim_X) == 3) {
+      X_out = apply(X*PFT_frac, MARGIN=1:2, FUN=sum, na.rm=TRUE)
+   } else if (length(dim_X) == 4) {
+      X_out = array(NaN, dim=dim_X[-PFT_dim])
+      extra_dim = (1:4)[-c(1, 2, PFT_dim)]
+      for (k in 1:dim_X[extra_dim]) {
+         if (PFT_dim == 3) X_sub = X[,,,k] else X_sub = X[,,k,]
+         X_out[,,k] = apply(X_sub*PFT_frac, MARGIN=1:2, FUN=sum, na.rm=TRUE)
+      }
+   } else if (length(dim_X) == 5) {
+      X_out = array(NaN, dim=dim_X[-PFT_dim])
+      extra_dim = (1:5)[-c(1, 2, PFT_dim)]
+      for (k in 1:dim_X[extra_dim[1]]) {
+         for (l in 1:dim_X[extra_dim[2]]) {
+            if (PFT_dim == 3) X_sub = X[,,,k,l] else if (PFT_dim == 4) X_sub = X[,,k,,l] else X_sub = X[,,k,l,]
+            X_out[,,k,l] = apply(X_sub*PFT_frac, MARGIN=1:2, FUN=sum, na.rm=TRUE)
+         }
+      }
+   } else if (length(dim_X) == 6) {
+      X_out = array(NaN, dim=dim_X[-PFT_dim])
+      extra_dim = (1:6)[-c(1, 2, PFT_dim)]
+      for (k in 1:dim_X[extra_dim[1]]) {
+         for (l in 1:dim_X[extra_dim[2]]) {
+            for (m in 1:dim_X[extra_dim[3]]) {
+               if (PFT_dim == 3) X_sub = X[,,,k,l,m] else if (PFT_dim == 4) X_sub = X[,,k,,l,m] else if (PFT_dim == 5) X_sub = X[,,k,l,,m] else X_sub = X[,,k,l,m,]
+               X_out[,,k,l,m] = apply(X_sub*PFT_frac, MARGIN=1:2, FUN=sum, na.rm=TRUE)
+            }
+         }
+      }
+   } else {
+      stop("Input data array has more than six dimensions!")
+   }
+   return(X_out)
+}
 
 ################################################################################
 ### End of module

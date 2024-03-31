@@ -10,7 +10,8 @@ cluster_flag = FALSE
 
 # Number of cores to use:
 # This will be overwritten by system-dependent setting if "cluster_flag=TRUE".
-# Use parallel::detectCores() for all available cores
+# Set "n_core = parallel::detectCores()" for all available cores.
+# Set "n_core = 1" for single-site simulations. If "single_site_flag=TRUE", "n_core=1" will be turned on automatically.
 n_core = parallel::detectCores()
 
 # Debugging mode?
@@ -24,13 +25,13 @@ debug_flag = TRUE
 # Required directories:
 
 # Set TEMIR directory:
-TEMIR_dir = '~/Dropbox/TGABI/TEMIR/'
+TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
 # Set source code directory:
 code_dir = paste0(TEMIR_dir, 'code_v1.0/')
 # Set meteorological data directory:
 met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5.d/')
 # Set PFT and surface data directory:
-surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/clm2_data/')
+surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
 # Set processed PFT and surface output directory:
 processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
 
@@ -75,12 +76,10 @@ if (single_site_flag) {
    if (FLUXNET_site_flag) {
       # Set FLUXNET directory:
       FLUXNET_dir = paste0(TEMIR_dir, 'TEMIR_inputs/FLUXNET/')
-      
       # Running simulation with FLUXNET meteorological/canopy data?
       FLUXNET_flag = FALSE
       # Specify FLUXNET site ID :
       FLUXNET_site_id = "US-Ha1"
-      
    } else {
       # Specify location (lon, lat) of local site of interest:
       lon_sim = 8.4104
@@ -99,7 +98,7 @@ if (single_site_flag) {
 # Which plant function type (PFT) to simulate?
 # Default PFTs follow the classification used in Community Land Model version 4.5 (CLM4.5) shown in PFT_df below
 # Please refer to each PFT by its PFT number quote in the first column of PFT_df
-sim_PFT = 1:15
+sim_PFT = 1:24
 
 # Default CLM4.5 PFT dataframe:
 # 1st col = PFT number; 2nd col = PFT description

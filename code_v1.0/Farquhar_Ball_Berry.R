@@ -11,6 +11,7 @@
 # Oct 2018: Added new "Medlyn" stomatal conductance scheme. (Sun)
 # Feb 2019: Modified the way L_sun and L_sha are defined and calculated. We believe that A_can, R_can and g_can should be scaled up by LAI only, not by LAI + SAI. Therefore, L_sun and L_sha here should be sunlit and shaded leaf area index, not plant area index, but we still consider both LAI and SAI when calculating light extinction. Now they are renamed "LAI_sun" and "LAI_sha" and "LAI_sun" has to taken explicitly from canopy radiative transfer model. (Tai)
 # Feb 2019: Now modified such that "g_ah" (aerodynamic conductance for heat, umol m^-2 s^-1 or m s^-1) is used instead of "g_am". (Tai, Feb 2019)
+# Apr 2020: Added "f_Kn_Kb" to scale "R_d25" in f_leaf_photosyn(). Not sure if "R_d25" needs to be adjusted for daylength in this case. (Tai, Apr 2020)
 
 ################################################################################
 ### Functions:
@@ -118,7 +119,7 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
     # 2. If "e_a" (Pa) adn "c_a" (Pa) and "g_b" (umol m^-2 s^-1 or m s^-1) are given, it calculates "g_s" via solving a quadratic equation using:
     #   e_s = (e_a/g_s+e_i/g_b)/(1/g_b+1/g_s)
     #   e_vpd = e_i-e_s
-    #   g_s = 1.6*(1+m/e_vpd^0.5)*A_n*P_atm/c_s
+    #   g_s = 1.6*(1+m/e_vpd^0.5)*A_n*P_atm/c_s + b
     # Medlyn et al. 2011
     
     # Saturation vapor pressure at leaf temperature (Pa):
@@ -151,8 +152,10 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
                
                 # put constraints on RH/vpd in MED mode
                 e_vpd = max(e_sat - e_s, 50)*0.001
-                g_s = 1.6*(1 + m/(e_vpd^0.5))*A_n/(c_s/P_atm)
+                g_s = 1.6*(1 + m/(e_vpd^0.5))*A_n/(c_s/P_atm) + b
+                
             } else {
+                
                 if (is.null(c_a) | is.null(e_a) | is.null(g_b)) stop('All of c_a, e_a and g_b need to be specified.')
                 if (met_cond) g_b = g_b/mol_to_met
                 tmp_c_s = max(c(1e-6, (c_a - (1.4/g_b)*P_atm*A_n)), na.rm=TRUE)
@@ -180,8 +183,8 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
                     c_s = max(c(1e-6, (c_a - (1.4/g_b)*P_atm*A_n)), na.rm=TRUE)
                     gs_roots = quadroot(a=c_s, b=(c_s*(g_b - b) - m*A_n*P_atm), c=(-g_b*(c_s*b + m*A_n*P_atm*e_a/e_sat)))
                     g_s = max(gs_roots, na.rm=TRUE)
-                    
                 }
+                
             }
         }
     } else if (gs_scheme == 'FBB') {
@@ -286,7 +289,8 @@ f_leaf_photosyn = function(c_i, phi, T_v=298.15, P_atm=101325, C3_plant=TRUE, V_
     # Leaf mitochondrial respiration at 25 degC (umol CO2 m^-2 s^-1):
     if (biogeochem) {
         if (is.null(leaf_N_conc)) stop('leaf_N_conc has to be specified.')
-        R_d25 = 0.2577*leaf_N_conc
+        R_d25 = 0.2577*leaf_N_conc*f_Kn_Kb
+        # Added "f_Kn_Kb" to scale "R_d25" above. Not sure if it needs to be adjusted for daylength. (Tai, Apr 2020)
     } else {
         if (C3_plant) R_d25 = 0.015*V_cmax25 else R_d25 = 0.025*V_cmax25
     }
@@ -593,7 +597,7 @@ f_ci = function() {
     g_s = f_stomatal_cond(A_n=A_n, c_a=c_a, e_a=e_a, g_b=g_b, T_v=T_v, P_atm=P_atm, beta_t=beta_t, C3_plant=C3_plant, met_cond=FALSE, g1_med=g1_med)
     # Revised "c_i":
     ci_new = c_a - (1.4/g_b + 1.6/g_s)*P_atm*A_n
-    if (A_n <= 0) fval = 0 else fval = c_i - ci_new
+    if (leaf_photosyn$A <= 0) fval = 0 else fval = c_i - ci_new
     output = list(fval=fval, c_i=ci_new, g_s=g_s, A_n=A_n, R_d=R_d)
     return(output)
 }
@@ -620,8 +624,8 @@ f_ci2 = function() {
     O3_coef_An_new = ozone_impact$O3_coef_An
     # Revised "c_i":
     ci_new = c_a - (1.4/g_b + 1.6/g_s)*P_atm*A_n
-    if (A_n <= 0) fval = 0 else fval = c_i - ci_new
-    if (A_n <= 0) gval = 0 else gval = O3_coef_An - O3_coef_An_new
+    if (leaf_photosyn$A <= 0) fval = 0 else fval = c_i - ci_new
+    if (leaf_photosyn$A <= 0) gval = 0 else gval = O3_coef_An - O3_coef_An_new
     output = list(fval=fval, gval=gval, c_i=ci_new, O3_coef_An=O3_coef_An_new, g_s=g_s, A_n=A_n, R_d=R_d)
     return(output)
 }
