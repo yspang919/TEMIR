@@ -1,6 +1,7 @@
 ###############################################################################
 ### Script containing relevant constants
 ###############################################################################
+# All are in SI units when applicable.
 
 # Physical constants:
 sigma_SB = 5.670367e-8  # Stefan-Boltzmann constant (W m^-2 K^-4)

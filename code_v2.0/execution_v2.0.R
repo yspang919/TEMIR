@@ -3,6 +3,14 @@
 ### Execution module for single-site, regional or global simulation
 ################################################################################
 
+## TODO
+# loading soil temperature for BGC calculation? options to not load the 5-layer soil T? need to check with the options for crop module.
+# loading for GDD maps
+# Should we delete FLUXNET data warnings? Seems obsolete.
+
+# Updates in version 2.0
+# New output mode 'PFT_daily' for daily variables in the crop module
+
 # Load necessary libraries upfront:
 library(tools) # For utilities
 library(methods) # For basic R utility
@@ -23,68 +31,41 @@ timestamp()
 ### Source input scripts for model configuration:
 ################################################################################
 
-options(warn = 2)
-
 # Source input scripts:
-# *** Please make sure the input scripts (e.g., input_TEMIR_basic_settings.R) are in the same simulation directory as this execution script. ***
+# *** Please make sure the input scripts (e.g., input_TEMIR.R and input_crop_extension.R) are in the same simulation directory as this execution script. ***
 source('input_TEMIR_basic_settings.R')
 
-if (file.exists('input_TEMIR_biogeochem_extension.R')) {
-   print("Sourcing 'input_TEMIR_biogeochem_extension.R'")
-    source('input_TEMIR_biogeochem_extension.R')
+if (file.exists('input_crop_extension.R')) {
+    # Simulation with the crop module
+    source('input_crop_extension.R')
 } else {
+    # Simulation without the crop module, biogeochem_flag is FALSE by settings
     biogeochem_flag = FALSE
 }
 
-print(O3_data_dir)
-
 # Check existence of directory paths:
 dir_check = ls(pattern = "_dir$")
-NA_dirs = match(optional_dirs, dir_check)[is.na(sapply(X = optional_dirs, FUN = get))]
-if (length(NA_dirs) != 0) dir_check = dir_check[-NA_dirs]
 for (idir in seq_along(dir_check)) {
-   # if (length(Sys.glob(paths = get(dir_check[idir]))) == 0) stop(paste0(dir_check[idir], ' does not exist!'))
    if (!dir.exists(paths = get(dir_check[idir]))) stop(paste0(dir_check[idir], ' does not exist!'))
-   # assign(dir_check[idir], paste0(file_path_as_absolute(Sys.glob(get(dir_check[idir]))), '/'))
-}
-rm(dir_check, idir, optional_dirs, NA_dirs)
+} ; rm(dir_check, idir)
 
-# Check whether the current working directory is a simulation directory:
-simulation_name.txt = paste0(basename(getwd()), '.txt')
-if (!file.exists(simulation_name.txt)) stop('Current working directory is not a simulation directory containing the execution_v*.R script! Please set the working directory to be the simulation directory to run the model.')
-rm(simulation_name.txt)
-
-# Set simulation directory:
-simulation_dir = paste0(getwd(), '/')
+# Print directory paths:
 print(paste0('Simulation directory: ', simulation_dir), quote=FALSE)
-print('Please make sure this is the simulation that you desire!', quote=FALSE)
-cat('\n')
+print('Please make sure this is the simulation that you desire!', quote=FALSE); cat('\n')
+print(paste0('Code directory: ', code_dir), quote=FALSE)
+print('Please make sure this is the code directory that you desire!', quote=FALSE); cat('\n')
 
-# Current TEMIR execution and input_TEMIR directory path:
-# simulation_dir = paste0(file_path_as_absolute('.'), '/')
-# if (dirname(simulation_dir) != file_path_as_absolute(TEMIR_dir)) simulation_dir = file_path_as_absolute(dirname(sub('--file=', '', commandArgs(trailingOnly = FALSE)[grep('--file=', commandArgs(trailingOnly = FALSE))])))
-
-# Check TEMIR directory path:
-# if (dirname(simulation_dir) != file_path_as_absolute(TEMIR_dir)) {
-   # print(paste0('Simulation directory : ', simulation_dir))
-   # print(paste0('TEMIR directory : ', TEMIR_dir))
-   # stop('Simulation directory is not a subdirectory in the TEMIR directory!')
-# }
-# setwd(simulation_dir)
-
-# Get simulation configuration:
+# Get simulation configuration for saving:
 model_config_vec = setdiff(ls(), ls(pattern = '_dir$'))
 
-# Turn on default TEMIR aerodynamic conductance scheme if Monin_Obukhov_flag=TRUE:
-if (Monin_Obukhov_flag) use_TEMIR_ga_flag = TRUE
-
+# Turn on default TEMIR aerodynamic conductance scheme if infer_canopy_met_flag=TRUE:
+if (infer_canopy_met_flag) ga_scheme = 'CLM4.5'
 
 ################################################################################
 ### Source scripts
 ################################################################################
 
-# Globally available geophysical constants:
-# All are in SI units when applicable.
+# Globally available geophysical constants: 
 source(paste0(code_dir, 'geophys_const.R'))
 
 # Useful functions:
@@ -116,13 +97,13 @@ if (!is.na(FLUXNET_dir)) source(paste0(code_dir, 'FLUXNET_functions.R'))
 # Surface and PFT input parameters (prescribed):
 source(paste0(code_dir, 'PFT_surf_data.R'))
 
-# Functions used in biogeochemistry module
+# Functions used in the crop module (after version 2.0)
 if(biogeochem_flag){
    source(paste0(BGC_code_dir, 'biomass_partitioning.R'))
    source(paste0(BGC_code_dir, 'plant_phenology.R'))
    source(paste0(BGC_code_dir, 'plant_physiology.R'))
    source(paste0(BGC_code_dir, 'maintenance_respiration.R'))
-   source(paste0(BGC_code_dir, 'Cpool_addition_subtraction.R'))
+   source(paste0(BGC_code_dir, 'Cpool_budget.R'))
 }
 
 ################################################################################
@@ -130,6 +111,61 @@ if(biogeochem_flag){
 ################################################################################
 
 cat('\n')
+
+# Biogeochemistry setting:
+if (!exists('biogeochem_flag')) biogeochem_flag = FALSE
+
+# FLUXNET site setting:
+if (FLUXNET_site_flag) {
+   if (FLUXNET_flag) {
+      
+      # Check for FLUXNET data availability over the simulation days:
+      FLUXNET_time_info = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = start_date, site.id = FLUXNET_site_id, utc.offset = NA, out.utc.offset = TRUE)
+      time_shift = FLUXNET_time_info$time_diff
+      shifted_start = FLUXNET_time_info$time ; rm(FLUXNET_time_info)
+      shifted_end = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = to.yyyymmdd(from.yyyymmdd(end_date) + 24), site.id = FLUXNET_site_id, utc.offset = time_shift, out.utc.offset = FALSE)
+      day_mod_flag = FALSE
+      
+      # Shift start date by one day to see if data is in range
+      if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'start', whole.date.for.year = shifted_start, site.id = FLUXNET_site_id)) {
+         temp_date = start_date
+         start_date = to.yyyymmdd(from.yyyymmdd(start_date) + 24)
+         print(paste0('Time shifted FLUXNET data is not available for start_date!'), quote = FALSE) 
+         print(paste0('So delaying start_date ', temp_date,' to the next day ', start_date), quote = FALSE); remove(temp_date)
+         day_mod_flag = TRUE
+      }
+      
+      # Shift end date by one day to see if data is in range
+      if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'end', whole.date.for.year = shifted_end, site.id = FLUXNET_site_id)) {
+         temp_date = end_date
+         end_date = to.yyyymmdd(from.yyyymmdd(end_date) - 24)
+         print(paste0('Time shifted FLUXNET data is not available for end_date!'), quote = FALSE)
+         print(paste0('So advancing end_date ', temp_date,' to the previous day ', end_date), quote = FALSE); remove(temp_date)
+         day_mod_flag = TRUE
+      }
+      
+      # Check for FLUXNET data availability over the shifted simulation days:
+      if (day_mod_flag) {
+         FLUXNET_time_info = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = start_date, site.id = FLUXNET_site_id, utc.offset = NA, out.utc.offset = TRUE)
+         time_shift = FLUXNET_time_info$time_diff
+         shifted_start = FLUXNET_time_info$time ; rm(FLUXNET_time_info)
+         shifted_end = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = to.yyyymmdd(from.yyyymmdd(end_date) + 24), site.id = FLUXNET_site_id, utc.offset = time_shift, out.utc.offset = FALSE)
+         
+         # Check if FLUXNET data is available for shifted dates
+         if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'start', whole.date.for.year = shifted_start, site.id = FLUXNET_site_id)) stop(paste0('Time shifted FLUXNET data is not available for start_date even after delaying by a day!!! Please check FLUXNET data of site ', FLUXNET_site_id, '....'))
+         if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'end', whole.date.for.year = shifted_end, site.id = FLUXNET_site_id)) stop(paste0('Time shifted FLUXNET data is not available for end_date even after advancing by a day!!! Please check FLUXNET data of site ', FLUXNET_site_id, '....'))
+      }
+      
+      # FLUXNET data taken as better data, replacing Monin-Obukhov outputs:
+      infer_canopy_cond_flag = FALSE
+   }
+   
+   # Get location (lon, lat) from FLUXNET_site_id:
+   FLUXNET_lon_lat = f_lon_lat_sim_from_FLUXNET(FLUXNET.dir = FLUXNET_dir, site.id = FLUXNET_site_id)
+   lon_sim = FLUXNET_lon_lat$lon_sim
+   lat_sim = FLUXNET_lon_lat$lat_sim
+   rm(FLUXNET_lon_lat)
+} else FLUXNET_flag = FALSE
 
 # Time step (s):
 dt = dt_hr*3600
@@ -139,58 +175,6 @@ date_vec = make.date.vec(start.date=start_date, end.date=end_date)
 
 # Number of simulation days:
 n_day_sim = length(date_vec)
-
-# Global simulation setting:
-if (!single_site_flag) {
-   # Set FLUXNET_flag as FALSE as single_site_flag is FALSE 
-   FLUXNET_site_flag = FALSE
-   FLUXNET_flag = FALSE
-}
-
-# FLUXNET site setting:
-if (FLUXNET_site_flag){
-   if (FLUXNET_flag){
-      # Check for FLUXNET data availability over the simulation days:
-      FLUXNET_time_info = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = start_date, site.id = FLUXNET_site_id, utc.offset = NA, out.utc.offset = TRUE)
-      time_shift = FLUXNET_time_info$time_diff
-      shifted_start = FLUXNET_time_info$time ; rm(FLUXNET_time_info)
-      shifted_end = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = to.yyyymmdd(from.yyyymmdd(end_date) + 24), site.id = FLUXNET_site_id, utc.offset = time_shift, out.utc.offset = FALSE)
-      day_mod_flag = FALSE
-      # Shift start date by one day to see if data is in range
-      if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'start', whole.date.for.year = shifted_start, site.id = FLUXNET_site_id)) {
-         temp_date = start_date
-         start_date = to.yyyymmdd(from.yyyymmdd(start_date) + 24)
-         print(paste0('Time shifted FLUXNET data is not available for start_date!'), quote = FALSE) 
-         print(paste0('So delaying start_date ', temp_date,' to the next day ', start_date), quote = FALSE); remove(temp_date)
-         day_mod_flag = TRUE
-      }
-      # Shift end date by one day to see if data is in range
-      if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'end', whole.date.for.year = shifted_end, site.id = FLUXNET_site_id)) {
-         temp_date = end_date
-         end_date = to.yyyymmdd(from.yyyymmdd(end_date) - 24)
-         print(paste0('Time shifted FLUXNET data is not available for end_date!'), quote = FALSE)
-         print(paste0('So advancing end_date ', temp_date,' to the previous day ', end_date), quote = FALSE); remove(temp_date)
-         day_mod_flag = TRUE
-      }
-      # Check for FLUXNET data availability over the shifted simulation days:
-      if (day_mod_flag) {
-         FLUXNET_time_info = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = start_date, site.id = FLUXNET_site_id, utc.offset = NA, out.utc.offset = TRUE)
-         time_shift = FLUXNET_time_info$time_diff
-         shifted_start = FLUXNET_time_info$time ; rm(FLUXNET_time_info)
-         shifted_end = f_FLUXNET_UTC_2_local(FLUXNET.dir = FLUXNET_dir, date = to.yyyymmdd(from.yyyymmdd(end_date) + 24), site.id = FLUXNET_site_id, utc.offset = time_shift, out.utc.offset = FALSE)
-         # Check if FLUXNET data is available for shifted dates
-         if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'start', whole.date.for.year = shifted_start, site.id = FLUXNET_site_id)) stop(paste0('Time shifted FLUXNET data is not available for start_date even after delaying by a day!!! Please check FLUXNET data of site ', FLUXNET_site_id, '....'))
-         if (!f_FLUXNET_date_range(FLUXNET.dir = FLUXNET_dir, start.or.end.year = 'end', whole.date.for.year = shifted_end, site.id = FLUXNET_site_id)) stop(paste0('Time shifted FLUXNET data is not available for end_date even after advancing by a day!!! Please check FLUXNET data of site ', FLUXNET_site_id, '....'))
-      }
-      # FLUXNET data taken as better data, replacing Monin-Obukhov outputs:
-      Monin_Obukhov_flag = FALSE
-   }
-   # Get location (lon, lat) from FLUXNET_site_id:
-   FLUXNET_lon_lat = f_lon_lat_sim_from_FLUXNET(FLUXNET.dir = FLUXNET_dir, site.id = FLUXNET_site_id)
-   lon_sim = FLUXNET_lon_lat$lon_sim
-   lat_sim = FLUXNET_lon_lat$lat_sim
-   rm(FLUXNET_lon_lat)
-}
 
 # Corresponding indices in global lon/lat grid for the simulated region:
 if (single_site_flag) {
@@ -215,7 +199,7 @@ for (n_i in 1:length(ind_lon)) {
             if (!FLUXNET_site_flag) {
                print(paste0('Single site simulation using ', met_name, ' data :'), quote = FALSE)
                print(paste0('Longitude = ', lon_sim, ', Latitude = ', lat_sim), quote = FALSE)
-               print(paste0('Land cover fraction of site = ', FRLAND[i,j]), quote = FALSE)
+               print(paste0('Land cover fraction of site = ', signif(FRLAND[i,j])), quote = FALSE)
             } else { 
                if (FLUXNET_flag){
                   print(paste0('Simulation using FLUXNET data of site ', FLUXNET_site_id, ' (gapfilled with ', met_name, '):'), quote = FALSE)
@@ -223,7 +207,7 @@ for (n_i in 1:length(ind_lon)) {
                   print(paste0('Simulation using ', met_name, ' data of FLUXNET site ', FLUXNET_site_id, ' :'), quote = FALSE)
                }
                print(paste0('Longitude = ', lon_sim, ', Latitude = ', lat_sim), quote = FALSE)
-               print(paste0('Land cover fraction of site ', FLUXNET_site_id, ' = ', FRLAND[i,j]), quote = FALSE)
+               print(paste0('Land cover fraction of site ', FLUXNET_site_id, ' = ', signif(FRLAND[i,j])), quote = FALSE)
             }
          } else stop('Grid cell contains no land!!!')
       } else { 
@@ -237,7 +221,7 @@ for (n_i in 1:length(ind_lon)) {
          }
       }   
    }
-}
+} ; rm(n, n_i)
 
 # Print general simulation information:
 if (!single_site_flag) {
@@ -286,9 +270,13 @@ if (cluster_flag) {
    if (is.na(n_core)) n_core = detectCores()
    n_node = as.numeric(Sys.getenv('PBS_NUM_NODES'))
    if (is.na(n_node)) n_node = 1
-   if (n_node > 1) stop('CLM-R cannot be run on multiple nodes!')
+   if (n_node > 1) stop('TEMIR cannot be run on multiple nodes!')
 }
-if (multicore_flag) print(paste0('# of cores used: ', as.character(n_core)), quote=FALSE) else print('# of cores used: 1', quote=FALSE)
+
+# For single-site simulation, always use one core only:
+if (single_site_flag) n_core = 1
+# Print number of cores used:
+print(paste0('# of cores used: ', as.character(n_core)), quote=FALSE)
 
 # Continue run:
 if (continue_flag) print('Continuing simulation from previous run...', quote=FALSE)
@@ -441,36 +429,28 @@ for (d in 1:n_day_sim) {
       }
       
       # Reload hourly ozone field:
-      # soyFACE temporary 
       if (O3_damage_flag & !O3_fixed_flag) {
-         # if (length(year_vec) > 1) {
-         #    YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY))])
-         #    last_YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY)) - 1])
-         #    if (YYYY_O3 != last_YYYY_O3) {
-         #       filename = paste0(O3_data_dir, O3_subn1, YYYY_O3, O3_subn2)
-         #       print(paste0('Loading surface O3 concentrations from ', filename, '...'), quote=FALSE)
-         #       nc = nc_open(filename)
-         #       lon_O3 = ncvar_get(nc, unname(O3_dim_vec['longitude']))
-         #       lat_O3 = ncvar_get(nc, unname(O3_dim_vec['latitude']))
-         #       # Surface O3 concentration (ppbv):
-         #       O3_hourly = ncvar_get(nc, O3_array_name)
-         #       nc_close(nc)
-         #       # Regrid to model resolution if input resolution is not consistent:
-         #       if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
-         #          # Regrid to model resolution:
-         #          print('Regridding hourly O3 concentrations for year ', YYYY_O3, '...', quote=FALSE)
-         #          O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
-         #       }
-         #    }
-         # }
-         
-         # soyFACE temporary 
-         if (force_prescribed_o3) {
-            O3_hourly = ozone_soyFACE_vec
+         if (length(year_vec) > 1) {
+            YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY))])
+            last_YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY)) - 1])
+            if (YYYY_O3 != last_YYYY_O3) {
+               filename = paste0(O3_data_dir, O3_subn1, YYYY_O3, O3_subn2)
+               print(paste0('Loading surface O3 concentrations from ', filename, '...'), quote=FALSE)
+               nc = nc_open(filename)
+               lon_O3 = ncvar_get(nc, unname(O3_dim_vec['longitude']))
+               lat_O3 = ncvar_get(nc, unname(O3_dim_vec['latitude']))
+               # Surface O3 concentration (ppbv):
+               O3_hourly = ncvar_get(nc, O3_array_name)
+               nc_close(nc)
+               # Regrid to model resolution if input resolution is not consistent:
+               if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
+                  # Regrid to model resolution:
+                  print('Regridding hourly O3 concentrations for year ', YYYY_O3, '...', quote=FALSE)
+                  O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
+               }
+            }
          }
-
       }
-      
    }
    
    #############################################################################
@@ -548,17 +528,12 @@ for (d in 1:n_day_sim) {
          
          # Get FLUXNET variable error if exists
          if (!is.null(temporary$err_out)) {
-            if (is.null(FLUXNET_var_err)) {
-               FLUXNET_var_err = rbind(temporary$err_out)
-            } else {
-               FLUXNET_var_err = rbind(FLUXNET_var_err, temporary$err_out)
-            }
+            FLUXNET_var_err = if (is.null(FLUXNET_var_err)) rbind(temporary$err_out) else rbind(FLUXNET_var_err, temporary$err_out)
          }
-         
-      }
+      } ; rm(temporary)
       
       # Make FLUXNET error for archive: (not supported by ncdf4 as matrix dimnames are lost when archiving nc)
-      if (!is.null(FLUXNET_var_err) && is.na(match('FLUXNET_error', names(var_list)))) {
+      if (FALSE && !is.null(FLUXNET_var_err) && is.na(match('FLUXNET_error', names(var_list)))) {
          err_nchar = ncdim_def(name='error_name_length', units='', vals=1:8, create_dimvar=FALSE)
          err_row = ncdim_def(name='error_number', units='', vals=1:nrow(FLUXNET_var_err),  longname='Number of Variable Error')
          err_col = ncdim_def(name='error_replace', units='', vals=1:2, longname='Error and Replacement Variables')
@@ -570,6 +545,8 @@ for (d in 1:n_day_sim) {
    
    #############################################################################
    
+   # Loading inputs for the crop modules (after version 2.0)
+
    # Soil temperature for biogeochemistry (Pang)
    if (biogeochem_flag){
        # Specify the soil layer depth (unit: m) for soil temperature from the surface layer to the deepest layer, can be a number (single layer) or an array (multiple layers)
@@ -623,12 +600,23 @@ for (d in 1:n_day_sim) {
    }
    
    #############################################################################
+
    environment(f_simulate_ij) = globalenv()
    environment(f_hist_reshape) = globalenv()
    
    # Simulate for each lon/lat:
    print('Simulating for each lon/lat...', quote=FALSE)
-   if (multicore_flag) hist_ij = mclapply(ij, FUN=f_simulate_ij, mc.cores=n_core) else hist_ij = lapply(ij, FUN=f_simulate_ij)
+   hist_ij = if (n_core != 1) { 
+      if (Sys.info()["sysname"] == 'Windows') {
+         cl = makeCluster(getOption("cl.cores", n_core))
+         parLapply(cl = cl, X = ij, fun=f_simulate_ij)
+         stopCluster(cl)
+      } else {
+         mclapply(ij, FUN=f_simulate_ij, mc.cores=n_core)
+      } 
+   } else {
+      lapply(ij, FUN=f_simulate_ij)
+   }
    print(paste0('Done on ', Sys.time()), quote=FALSE)
    
    if (debug_flag) {
@@ -671,13 +659,9 @@ for (d in 1:n_day_sim) {
          
          # Put in values of variables:
          for (v in 1:nrow(var_name)) {
-            if (var_name[v,4] == 'grid') {
-                    ncvar_put(nc=nc, varid=var_list[[v]], vals= hist_grid[,,1,,v])
-                } else if (var_name[v,4] == 'PFT') {
-                    ncvar_put(nc=nc, varid=var_list[[v]], vals=hist_grid[,,,,v])
-                } else if (var_name[v,4] == 'PFT_daily') {
-                    ncvar_put(nc=nc, varid=var_list[[v]], vals=hist_grid[,,,24,v])
-                }
+            if (var_name[v,4] == 'grid') ncvar_put(nc=nc, varid=var_list[[v]], vals= hist_grid[,,1,,v])
+            if (var_name[v,4] == 'PFT') ncvar_put(nc=nc, varid=var_list[[v]], vals=hist_grid[,,,,v])
+            if (var_name[v,4] == 'PFT_daily') ncvar_put(nc=nc, varid=var_list[[v]], vals=hist_grid[,,,24,v])
          }
          
          # Put in dimentions and attributes:
@@ -688,24 +672,21 @@ for (d in 1:n_day_sim) {
          ncatt_put(nc, varid=0, attname='Title', attval=paste0(basename(simulation_dir), ' ', YYYY, MM, DD))
          ncatt_put(nc, varid=0, attname='Conventions', attval='COARDS')
          ncatt_put(nc, varid=0, attname='History', attval=paste0('Generated on ', Sys.time()))
-         
-         # Disable at the time being (Pang, Apr 2020)
-         # Apparently we cannot wrtie logical values into the ncdf4
-         
-         # # FLUXNET data warnings:
-         # if (single_site_flag && FLUXNET_flag) {
-         #    ncatt_put(nc, varid=0, attname='FLUXNET Site Warnings', attval=FLUXNET_global_err)
-         #    if (!is.null(FLUXNET_var_err)) {
-         #       ncvar_put(nc, varid=FLUXNET_err_nc_def, vals=FLUXNET_var_err)
-         #       ncatt_put(nc, varid='error_number', attname='axis', attval='n_error')
-         #       ncatt_put(nc, varid='error_replace', attname='axis', attval='error_replace')
-         #       rm(FLUXNET_var_err)
-         #    }
-         # }
-         
+
+         # FLUXNET data warnings:
+         if (FALSE && single_site_flag && FLUXNET_flag) {
+            ncatt_put(nc, varid=0, attname='FLUXNET Site Warnings', attval=FLUXNET_global_err)
+            if (!is.null(FLUXNET_var_err)) {
+               ncvar_put(nc, varid=FLUXNET_err_nc_def, vals=FLUXNET_var_err)
+               ncatt_put(nc, varid='error_number', attname='axis', attval='n_error')
+               ncatt_put(nc, varid='error_replace', attname='axis', attval='error_replace')
+               rm(FLUXNET_var_err)
+            }
+         }
+
          # Close nc file:
          nc_close(nc)
-         
+
          # Save error messages:
          if (!is.null(err_msg) || length(err_hist_ij) != 0) {
             filename = paste0(simulation_dir, 'hist_data/hist_err_', YYYY, MM, DD, '.RData')
@@ -723,8 +704,7 @@ for (d in 1:n_day_sim) {
       d_prev = 15
       previous_date = to.yyyymmdd(from.yyyymmdd(current_date) - d_prev*24)
       pathname = paste0(simulation_dir, 'temp_data/temp_', as.character(previous_date))
-      #system(command = paste0('rm -rf ', pathname))
-      dir.remove(pathname)
+      suppressMessages(dir.remove(pathname))
    }
 }
 
