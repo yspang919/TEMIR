@@ -3,25 +3,31 @@
 ### Initialization script for single-site, regional or global simulation
 ################################################################################
 
-# TEMIR version:
-TEMIR_version = '1.1'
+# TODO
+# There will be version 1.1, 1.2..., copying input and execution scripts shouldn't be version specific? They will be copied in all version.
+
+# TEMIR version (Change this and the model will copy the necessary scripts):
+# version 1.0 (Aug 2023): simulation of terrestrial plant GPP with satellite phenology
+# version 2.0 (June? 2024): simulation of crops with a vegetation carbon model 
+TEMIR_version = '2.0'
 
 # Set TEMIR directory:
-TEMIR_dir = '/users/b146986/TEMIR/'
+TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+
+# Set simulation parent directory:
+# Users can specify their customized parent directory for their simulations here.
+sim_parent_dir = TEMIR_dir
 
 ################################################################################
 ### TEMIR simulation setup:
 ################################################################################
 
-# Case name read from bash script (temporary)
-TEMIR_caseName = as.character(Sys.getenv("bash_caseName"))
-
 # Create a name for this simulation:
-simulation_name = TEMIR_caseName
-# simulation_name = 'soyFACE_set2_forceSP_yr2003_eco2'
+simulation_name = 'test_v2.0'
 
 # Simulation types:
 
+# not in old script
 # Simulating biogeochemistry? (default: FALSE)
 # If TRUE, leaf area index and stem area index are now prognostic instead of prescribed.
 biogeochem_flag = TRUE
@@ -29,6 +35,9 @@ biogeochem_flag = TRUE
 ################################################################################
 ### Check TEMIR model availability:
 ################################################################################
+
+# Set simulation parent directory:
+sim_dir = paste0(sim_parent_dir, simulation_name, '/')
 
 # Check if TEMIR directory exists:
 if (!dir.exists(paths = TEMIR_dir)) stop('TEMIR directory does not exist!')
@@ -40,41 +49,29 @@ if (!dir.exists(paths = paste0(TEMIR_dir, '/code_v', TEMIR_version))) stop('TEMI
 ### Initialize TEMIR:
 ################################################################################
 
-# Set simulation directory name:
-sim_dir = paste0(TEMIR_dir,'TEMIR_run/' ,simulation_name, '/')
-
 # Check if simulation directory already exists:
-# if (length(Sys.glob(paths = sim_dir)) == 1) stop(paste0('Simulation directory "', sim_dir,'" already exists!'))
 if (dir.exists(paths = sim_dir)) stop(paste0('Simulation directory "', sim_dir,'" already exists!'))
-dir.create(path = sim_dir)
 
 # Create output directory:
-# system(command=paste0("mkdir -p ", sim_dir, "hist_data"))
 dir.create(path = paste0(sim_dir, 'hist_data'), recursive = TRUE)
 
 # Create temporary directory:
-# system(command=paste0("mkdir ", sim_dir, "temp_data"))
 dir.create(path = paste0(sim_dir, 'temp_data'))
 
 # Set simulation directory as working directory:
 setwd(sim_dir)
 
 # Copy execution script:
-# system(command=paste0("cp ", TEMIR_dir, 'code_v', TEMIR_version, '/execution_v', TEMIR_version, ".R ", sim_dir))
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/execution_v', TEMIR_version, '.R'), to = sim_dir)
 
-# Copy basic settings and ecophysiology input script:
-file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/input_TEMIR_basic_settings.R'), to = sim_dir)
-
-# Copy biogeochemistry input script:
-if (biogeochem_flag) file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/input_TEMIR_biogeochem_extension.R'), to = sim_dir)
-
-# Copy simulation name text file:
-file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/simulation_name.txt'), to = paste0(sim_dir, simulation_name, '.txt'))
+# Copy baseline input script:
+file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/input_TEMIR.R'), to = sim_dir)
 
 # Copy script that contains functions to analyze outputs:
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/find_hist_stat.R'), to = sim_dir)
 
+# Copy input script for the crop model (only after v2.0)
+if (TEMIR_version == '2.0') file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_biogeochem_extension.R'), to = sim_dir)
 
 ################################################################################
 ### End of initialization
