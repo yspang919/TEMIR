@@ -306,10 +306,10 @@ f_simulate_ij = function(IJ) {
              # Daily average planting temperature requirement (K)
              avg_T_planting_req = planting_temp[ipft]; if (at_tropical_flag && any(ipft == c(18,19,24,25))) {avg_T_planting_req = 294.15}
              # CLM rooting distribution parameter a and b and the root fraction
+             # This is now done in PFT_surf_data.R (Pang, Apr 2024)
              root_a_par = roota_par[ipft]
              root_b_par = roota_par[ipft]
-             get_root_fraction = f_get_root_fraction(soil_depth_array = soil_layer_depth, a_rootfrac = root_a_par, b_rootfrac = root_b_par)
-             root_frac_array = get_root_fraction$root_fraction_array
+             root_frac_Tsoil_pft = root_frac_Tsoil[ipft, ] # from PFT_surf_data, array of root_frac (mutlilayer soil) or value of 1 (single layer soil)
              # Seasonal deciduous PFT:
              season_decid_flag = (season_decid[ipft] == 1)
              # Specific leaf area (SLA) at top of canopy (projected area basis) (m^2 gC^-1):
@@ -657,19 +657,14 @@ f_simulate_ij = function(IJ) {
             cldtot = CLDTOT[i,j,h]
             # Soil temperature for different layers
             if (biogeochem_flag) {
-            T_soil1 = TSOIL1[i,j,h]
-            T_soil2 = TSOIL2[i,j,h]
-            T_soil3 = TSOIL3[i,j,h]
-            T_soil4 = TSOIL4[i,j,h]
-            T_soil5 = TSOIL5[i,j,h]
-            
-            # Stop simulating the grid if Tsoil is missing, especially at the coastal area
-            if(any(is.na(c(T_soil1, T_soil2, T_soil3, T_soil4, T_soil5)))) {break}
-            T_soil_array_input = array(NA, dim = length(soil_layer_depth))
-            
-            for (z in 1:length(soil_layer_depth)){
-                T_soil_array_input[z] = eval(parse(text = paste0("T_soil",z)))
-            }
+              # Soil temperature of different layers
+              if (T_soil_source == 'MERRA2') {
+                # depth of the bottom of each soil layer in m 
+                T_soil_array = c(TSOIL1[i,j,h], TSOIL2[i,j,h], TSOIL3[i,j,h], TSOIL4[i,j,h], TSOIL5[i,j,h])
+              } else if (T_soil_source == 'custom') {
+                # create an array of soil temperature in K from the surface layer to the bottom layer
+                # T_soil_array = c(...)
+              }
             }
             
             
@@ -999,10 +994,9 @@ f_simulate_ij = function(IJ) {
                     grain_cn_ratio = grain_cn
                 }
                 
-                maintenance_respiration_fluxes = f_maintenance_respiration_fluxes(woody.flag = woody_flag, root_frac_cnst_a = root_a_par, root_frac_cnst_b = root_b_par,
-                                                                                  soil_depth_array = soil_layer_depth, T_soil_array = T_soil_array_input, T_2M = T_2m,
+                maintenance_respiration_fluxes = f_maintenance_respiration_fluxes(woody.flag = woody_flag, soil_depth_array = soil_layer_depth, T_soil_array = T_soil_array_input, T_2M = T_2m,
                                                                                   leaf_N = leaf_C / leaf_cn_ratio, livestem_N = livestem_C / stem_cn_ratio, livecoarseroot_N = livecoarseroot_C / coarseroot_cn_ratio, fineroot_N = fineroot_C / fineroot_cn_ratio, grain_N = grain_C / grain_cn_ratio,
-                                                                                  root_fraction_array = root_frac_array)              
+                                                                                  root_fraction_array = root_frac_Tsoil_pft)              
                 
                 single_timestep_mr = maintenance_respiration_fluxes$mr_total
                 single_timestep_An = canopy_photosyn$A_can

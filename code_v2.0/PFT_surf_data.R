@@ -331,6 +331,26 @@ for (i in 1:nlevsoi) {
       root_frac[,i] = 0.5*(exp(-roota_par*z_hi[i]) + exp(-rootb_par*z_hi[i]))
    }
 }
+
+# Root fraction calculated with the soil layer depth in the soil temperature input (for the calculation of maintenance respiration)
+if (biogeochem_flag) {
+  if (is.na(T_soil_depth_array)) {
+    # single layer soil temperature input, root fraction is not needed
+    root_frac_Tsoil = array(1, dim=length(pftname))
+  } else {
+    # multiple layer soil temperature input 
+    z_hi_T_soil = c(0, T_soil_depth_array)     # add a '0' here, as the calculation above calculate the roof fraction between two layer interfaces. T_soil_depth_array has the depth of the bottom of a soil layer
+    root_frac_Tsoil = matrix(0, nrow=length(pftname), ncol=length(T_soil_depth_array))
+    for (i in 1:length(T_soil_depth_array)) {
+      if (i < length(T_soil_depth_array)) {
+        root_frac_Tsoil[, i] = 0.5*(exp(-roota_par*z_hi_T_soil[i]) + exp(-rootb_par*z_hi_T_soil[i]) - exp(-roota_par*z_hi_T_soil[i+1]) - exp(-rootb_par*z_hi_T_soil[i+1]))
+      } else {
+        root_frac_Tsoil[,i] = 0.5*(exp(-roota_par*z_hi_T_soil[i]) + exp(-rootb_par*z_hi_T_soil[i]) - exp(-roota_par*z_hi_T_soil[i+1]) - exp(-rootb_par*z_hi_T_soil[i+1]))
+      }
+    }
+  }
+}
+
 # Depth of TEMIR top soil layer (m):
 z1_TEMIR = 0.05 
 # Depth of TEMIR root zone (m):
@@ -1124,6 +1144,7 @@ if (biogeochem_flag) {
   nc_close(nc)
   print(paste0("Finish loading initial data from ",subfn))
 }
+
 ################################################################################
 ### End of module
 ################################################################################

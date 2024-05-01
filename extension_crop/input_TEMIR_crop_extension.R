@@ -32,14 +32,28 @@ soilT_data_dir = '/lustre/project/TGABI/data/MERRA2_2x2.5_soilT/'
 optional_dirs = c(optional_dirs, 'planting_date_map_dir', 'GDDx_map_dir', 'Sack_GDDmat_dir')
 ################################################################################
 
-### Settings for the simulation of all vegetations ###
+### Settings for the simulation of all vegetation ###
 
-# How to calculate the root fraction as a function of soil depth? ('CLM4.5', 'single_layer' or 'custom')
-# The root fraction is used for the calculation of root maintenance respiration (see maintenance_respiration.R). 
-# 'CLM4.5': default method, its calculation based on the description in CLM4.5. The root maintenance respiration is the weighted average of the respirations calculated in the five layers of soil.
-# 'single_layer': root fraction is not calculated, root maintenance respiration is calculated using one soil temperature input. Suitable for simulations with measured 1-layer soil temperature.
+# Data Source of soil temperature input for the calculation of maintenance respiration ('MERRA2' or 'custom')
+# 'MERRA2': using the soil temperature from MERRA-2 (5 layers of soil temperature)
+# 'custom': using your own soil temperature data (single- or multilayer), the depth of the bottom of each layer must be provided if there are more than one layer
+T_soil_source = 'MERRA2'
+
+# The depth of the bottom of the soil layer of the soil temperature input (in m) for the calculation of root fraction
+# For single-layer soil temperature data input, please enter NA (even if the depth is provided)
+if (T_soil_source == 'MERRA2') {
+  T_soil_depth_array = c(0.0988, 0.2940, 0.6799, 1.4425, 2.9496)
+} else if (T_soil_depth == 'custom') {
+  # T_soil_depth = c(...)
+  # T_soil_dpeth = NA
+}
+
+# Obsolete**
+# How to calculate the root fraction for each PFT at different soil layers of the soil temperature data input? ('CLM4.5' or 'custom')
+# Noted that the roof fraction is also calculated in PFT_surf_data.R for the calculation of soil hydrological parameters (using the 10 layers of soil depth in CLM). The scheme selected here doesn't affect the calculation of root fraction for the calculation of soil hydrological parameters.
+# 'CLM4.5': the default method, calculation is based on the description in CLM4.5.
 # 'custom': implement your own method in maintenance_respiration.R
-root_frac_scheme = 'CLM4.5'
+# root_frac_Tsoil_scheme = 'CLM4.5'
 
 # How to calculate the maintenance respiration? ('CLM4.5', or 'custom')
 # 'CLM4.5': default method, maintenance respiration is function of plant nitrogen content, T2m, Tsoil, and sensitivity coefficient Q10.
@@ -53,10 +67,12 @@ LAI_scheme = 'CLM4.5'
 SAI_scheme = 'CLM4.5'
 canopy_h_scheme = 'CLM4.5'
 
-if (!any(root_frac_scheme == c('CLM4.5','single_layer','custom'))){stop("Invalid input for 'root_frac_scheme' in input_TEMIR_crop_extension.R")}
-if (!any(LAI_scheme == c('CLM4.5','custom'))){stop(stop("Invalid input for 'LAI_scheme' in input_TEMIR_crop_extension.R")}
-if (!any(SAI_scheme == c('CLM4.5','custom'))){stop(stop("Invalid input for 'SAI_scheme' in input_TEMIR_crop_extension.R")}
-if (!any(canopy_h_scheme == c('CLM4.5','custom'))){stop(stop("Invalid input for 'canopy_h_scheme' in input_TEMIR_crop_extension.R")}
+if (!any(T_soil_source) == c('MERRA2', 'custom')) stop("Invalid input for 'T_soil_source' in input_TEMIR_crop_extension.R")
+# if (!any(root_frac_Tsoil_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'root_frac_Tsoil_scheme' in input_TEMIR_crop_extension.R")
+if (!any(T_soil_source) == c('CLM4.5', 'custom')) stop("Invalid input for 'main_resp_scheme' in input_TEMIR_crop_extension.R")
+if (!any(LAI_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'LAI_scheme' in input_TEMIR_crop_extension.R")
+if (!any(SAI_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'SAI_scheme' in input_TEMIR_crop_extension.R")
+if (!any(canopy_h_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'canopy_h_scheme' in input_TEMIR_crop_extension.R")
 
 ################################################################################
 
@@ -67,7 +83,7 @@ if (!any(canopy_h_scheme == c('CLM4.5','custom'))){stop(stop("Invalid input for 
 # 'CLM4.5' (default): follow the description in CLM4.5 (in developement)
 # 'custom' implement your own scheme in biomass_partitioning.R
 natveg_C_partit_method = 'CLM4.5'
-if (!any(natveg_C_partit_method == c('CLM4.5','custom'))) {stop("Invalid input for 'natveg_C_partit_method' in input_TEMIR_crop_extension.R")}
+if (!any(natveg_C_partit_method == c('CLM4.5','custom'))) stop("Invalid input for 'natveg_C_partit_method' in input_TEMIR_crop_extension.R")
 
 ################################################################################
 
@@ -81,7 +97,7 @@ if (!any(natveg_C_partit_method == c('CLM4.5','custom'))) {stop("Invalid input f
 #   - crop_growing_season can either be 'primary' and 'secondary'
 
 crop_planting_date_method = 'CLM4.5'
-if (!any(crop_planting_date_method == c('CLM4.5','prescribed-map','prescribed-site'))) {stop("Invalid input for 'crop_planting_date_method' in input_TEMIR_crop_extension.R")}
+if (!any(crop_planting_date_method == c('CLM4.5','prescribed-map','prescribed-site'))) stop("Invalid input for 'crop_planting_date_method' in input_TEMIR_crop_extension.R")
 
 # Fill in the directory name that contains the map of planting date (data is imported at PFT_surf_data.R)
 if (crop_planting_date_method == 'prescribed-map'){

@@ -549,24 +549,29 @@ for (d in 1:n_day_sim) {
 
    # Soil temperature for biogeochemistry (Pang)
    if (biogeochem_flag){
-       # Specify the soil layer depth (unit: m) for soil temperature from the surface layer to the deepest layer, can be a number (single layer) or an array (multiple layers)
-       soil_layer_depth = c(0.0988,0.2940,0.6799,1.4425,2.9496)
-       
-       filename = list.files(path = paste0(soilT_data_dir), pattern = paste0(YYYY,MM,DD), recursive = T)
-       filename = paste0(soilT_data_dir, filename)
-       
-       nc = nc_open(filename)
-       # Soil temperature 1st layer (0 - 9.88cm) (K)
-       TSOIL1 = ncvar_get(nc,"TSOIL1")
-       # Soil temperature 2nd layer (9.88cm - 29.4cm) (K)
-       TSOIL2 = ncvar_get(nc,"TSOIL2")
-       # Soil temperature 3rd layer (29.4cm - 68.0cm) (K)
-       TSOIL3 = ncvar_get(nc,"TSOIL3")
-       # Soil temperature 4th layer (68.0cm - 144cm) (K)
-       TSOIL4 = ncvar_get(nc,"TSOIL4")
-       # Soil temperature 5th layer (144cm - 295cm) (K)
-       TSOIL5 = ncvar_get(nc,"TSOIL5")
-       nc_close(nc)
+     
+       # Soil temperature input
+       if (T_soil_source == 'MERRA2') {
+
+         filename = list.files(path = paste0(soilT_data_dir), pattern = paste0(YYYY,MM,DD), recursive = T)
+         filename = paste0(soilT_data_dir, filename)
+         
+         nc = nc_open(filename)
+         # Soil temperature of the surface layer (0 - 9.88cm) (K)
+         TSOIL1 = ncvar_get(nc,"TSOIL1")
+         # Soil temperature of the 2nd layer (9.88cm - 29.4cm) (K)
+         TSOIL2 = ncvar_get(nc,"TSOIL2")
+         # Soil temperature of the 3rd layer (29.4cm - 68.0cm) (K)
+         TSOIL3 = ncvar_get(nc,"TSOIL3")
+         # Soil temperature of the 4th layer (68.0cm - 144cm) (K)
+         TSOIL4 = ncvar_get(nc,"TSOIL4")
+         # Soil temperature of the 5th layer (144cm - 295cm) (K)
+         TSOIL5 = ncvar_get(nc,"TSOIL5")
+         nc_close(nc)
+         
+       } else if (T_soil_source == 'custom') {
+         # Implement your code to read soil temperature input
+       }
    }
    
    # GDD map for determining GDDmat
