@@ -1101,22 +1101,24 @@ f_simulate_ij = function(IJ) {
                     
                     
                     # Updating carbon pool budgets
-                    plant_Cpool_addition_subtraction = f_Cpool_addition_subtraction(grain_filling_flag = grain_fill_flag, harvesting_flag = harvest_flag, ipft = ipft,
-                                                                                    leaf_C_prev = leaf_C,         leaf_C_biomass_partitioning_flux_gCm2s1 = leaf_C_alloc_flux,                     leaf_C_loss_flux_gCm2s1 = leaf_C_loss_flux,         seedC_to_leafC_flux_gCm2s1 = crop_emergence_flux,
-                                                                                    livestem_C_prev = livestem_C, livestem_C_biomass_partitioning_flux_gCm2s1 = livestem_C_alloc_flux,             livestem_C_loss_flux_gCm2s1 = livestem_C_loss_flux,
-                                                                                    deadstem_C_prev = 0,          deadstem_C_biomass_partitioning_flux_gCm2s1 = deadstem_C_alloc_flux,             deadstem_C_loss_flux_gCm2s1 = 0,
-                                                                                    livecoarseroot_C_prev = 0,    livecoarseroot_C_biomass_partitioning_flux_gCm2s1 = livecoarseroot_C_alloc_flux, livecoarseroot_C_loss_flux_gCm2s1 = 0,
-                                                                                    deadcoarseroot_C_prev = 0,    deadcoarseroot_C_biomass_partitioning_flux_gCm2s1 = deadcoarseroot_C_alloc_flux, deadcoarseroot_C_loss_flux_gCm2s1 = 0,
-                                                                                    fineroot_C_prev = fineroot_C, fineroot_C_biomass_partitioning_flux_gCm2s1 = fineroot_C_alloc_flux,             fineroot_C_loss_flux_gCm2s1 = fineroot_C_loss_flux,
-                                                                                    grain_C_prev = grain_C,       grain_C_biomass_partitioning_flux_gCm2s1 = grain_C_alloc_flux,                   grain_C_loss_flux_gCm2s1 = grain_C_loss_flux)
+                    # Some of the C pools are always zero: reserved for natural vegetation
+                    plant_Cpool_budgets = f_Cpool_budgets(is_crop = crop_flag, is_evergreen = evergreen_flag, is_stress_decid = stress_decid_flag, is_season_decid = season_decid_flag, 
+                                                          grain_filling_flag = grain_fill_flag, harvesting_flag = harvest_flag, DVI = .............,
+                                                          leaf_C_prev = leaf_C, leaf_C_biomass_partitioning_flux_gCm2s1 = leaf_C_alloc_flux, leaf_C_loss_flux_gCm2s1 = leaf_C_loss_flux, seedC_to_leafC_flux_gCm2s1 = crop_emergence_flux,
+                                                          livestem_C_prev = livestem_C, livestem_C_biomass_partitioning_flux_gCm2s1 = livestem_C_alloc_flux, livestem_C_loss_flux_gCm2s1 = livestem_C_loss_flux,
+                                                          deadstem_C_prev = 0, deadstem_C_biomass_partitioning_flux_gCm2s1 = deadstem_C_alloc_flux, deadstem_C_loss_flux_gCm2s1 = 0,
+                                                          livecoarseroot_C_prev = 0, livecoarseroot_C_biomass_partitioning_flux_gCm2s1 = livecoarseroot_C_alloc_flux, livecoarseroot_C_loss_flux_gCm2s1 = 0,
+                                                          deadcoarseroot_C_prev = 0, deadcoarseroot_C_biomass_partitioning_flux_gCm2s1 = deadcoarseroot_C_alloc_flux, deadcoarseroot_C_loss_flux_gCm2s1 = 0,
+                                                          fineroot_C_prev = fineroot_C, fineroot_C_biomass_partitioning_flux_gCm2s1 = fineroot_C_alloc_flux, fineroot_C_loss_flux_gCm2s1 = fineroot_C_loss_flux,
+                                                          grain_C_prev = grain_C, grain_C_biomass_partitioning_flux_gCm2s1 = grain_C_alloc_flux, grain_C_loss_flux_gCm2s1 = grain_C_loss_flux)
                     
-                    leaf_C = plant_Cpool_addition_subtraction$leaf_C_new
-                    # fineroot_C = plant_Cpool_addition_subtraction$fineroot_C_new
-                    # livestem_C = plant_Cpool_addition_subtraction$livestem_C_new
-                    deadstem_C = plant_Cpool_addition_subtraction$deadstem_C_new
-                    # livecoarseroot_C = plant_Cpool_addition_subtraction$livecoarseroot_C_new
-                    # deadcoarseroot_C = plant_Cpool_addition_subtraction$deadcoarseroot_C_new
-                    # grain_C = plant_Cpool_addition_subtraction$grain_C_new
+                    leaf_C = plant_Cpool_budgets$leaf_C_new
+                    # fineroot_C = plant_Cpool_budgets$fineroot_C_new
+                    # livestem_C = plant_Cpool_budgets$livestem_C_new
+                    deadstem_C = plant_Cpool_budgets$deadstem_C_new
+                    # livecoarseroot_C = plant_Cpool_budgets$livecoarseroot_C_new
+                    # deadcoarseroot_C = plant_Cpool_budgets$deadcoarseroot_C_new
+                    # grain_C = plant_Cpool_budgets$grain_C_new
                     
                     # Updating the change of vegetation physiology
                     vegetation_structure = f_vegetation_structure(slatop = sla_top, dsladlai = dsla_dlai, laimx = LAI_max, woody = woody_flag, crop = crop_flag, ipft = ipft, ztopmx = ztopmax,
@@ -1206,13 +1208,13 @@ f_simulate_ij = function(IJ) {
                                                     c('htop_PFT_hist_ijd','vegetation_structure$canopy_top'),
                                                     c('hbot_PFT_hist_ijd','vegetation_structure$canopy_bottom'),
                                                     # Carbon pools
-                                                    c('leafC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$leaf_C_new'),
-                                                    c('finerootC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$fineroot_C_new'),
-                                                    c('livestemC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$livestem_C_new'),
-                                                    c('deadstemC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$deadstem_C_new'),
-                                                    c('livecoarserootC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$livecoarseroot_C_new'),
-                                                    c('deadcoarserootC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$deadcoarseroot_C_new'),
-                                                    c('grainC_PFT_hist_ijd', 'plant_Cpool_addition_subtraction$grain_C_new'),
+                                                    c('leafC_PFT_hist_ijd', 'plant_Cpool_budgets$leaf_C_new'),
+                                                    c('finerootC_PFT_hist_ijd', 'plant_Cpool_budgets$fineroot_C_new'),
+                                                    c('livestemC_PFT_hist_ijd', 'plant_Cpool_budgets$livestem_C_new'),
+                                                    c('deadstemC_PFT_hist_ijd', 'plant_Cpool_budgets$deadstem_C_new'),
+                                                    c('livecoarserootC_PFT_hist_ijd', 'plant_Cpool_budgets$livecoarseroot_C_new'),
+                                                    c('deadcoarserootC_PFT_hist_ijd', 'plant_Cpool_budgets$deadcoarseroot_C_new'),
+                                                    c('grainC_PFT_hist_ijd', 'plant_Cpool_budgets$grain_C_new'),
                                                     # GPP, NPP, biomass partitioning fluxes
                                                     c('GPP_PFT_hist_ijd', paste0(alloc_prefix,'$daily_mean_GPP')),
                                                     c('NPP_PFT_hist_ijd', paste0(alloc_prefix,'$daily_mean_NPP')),
