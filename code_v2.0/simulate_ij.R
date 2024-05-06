@@ -1120,10 +1120,11 @@ f_simulate_ij = function(IJ) {
                     # deadcoarseroot_C = plant_Cpool_budgets$deadcoarseroot_C_new
                     # grain_C = plant_Cpool_budgets$grain_C_new
                     
-                    # Updating the change of vegetation physiology
-                    vegetation_structure = f_vegetation_structure(slatop = sla_top, dsladlai = dsla_dlai, laimx = LAI_max, woody = woody_flag, crop = crop_flag, ipft = ipft, ztopmx = ztopmax,
-                                                                  leafC = leaf_C, deadstemC = deadstem_C, tlai = LAI, tsai = SAI, peak_lai_flag = peak_LAI_flag, harvesting_flag = harvest_flag, crop_living_flag = crop_live_flag,
-                                                                  CUO = CUO_BGC)
+                    # Updating the change of vegetation structure
+                    vegetation_structure = f_vegetation_structure(is_crop = crop_flag, is_evergreen = evergreen_flag, is_stress_decid = stress_decid_flag, is_season_decid = season_decid_flag, is_woody = woody_flag, ipft = ipft,
+                                                                  slatop = sla_top, dsladlai = dsla_dlai, laimx = LAI_max, ztopmx = ztopmax,
+                                                                  leafC = leaf_C, deadstemC = deadstem_C, tlai = LAI, tsai = SAI, 
+                                                                  peak_lai_flag = peak_LAI_flag, harvesting_flag = harvest_flag, crop_living_flag = crop_live_flag)
                     
                 }
             } # End of the simulation of crops
