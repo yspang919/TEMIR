@@ -192,13 +192,19 @@ if (!any(crop_transloc_scheme == c('CLM4.5', 'JULES', 'custom'))) stop("Invalid 
 
 ## How is the leaf senescence rate and the timing of senescence parameterized in the model? ('CLM4.5', 'custom')
 # 'CLM4.5': based on the leaf senescence rate described in CLM4.5 Technical Note. Leaf starts to fall at the beginning of the reproductive stage (i.e., GDD >= GDDrepr) and the senescence rate = - (leaf_longevity [in day] * leaf_C) / 365 * 86400). Noted that the the default value of leaf longevity for crops in CLM4.5 is too long, and it is reduced in this model.
-# 'custom': implement your own leaf senescence scheme in at plant_phenology.R 
+# 'custom': implement your own leaf senescence scheme in at plant_phenology.R, togehter with 'leaf_senescence_DVI' below.
 crop_leaf_sen_scheme = 'custom'
 if (!any(crop_leaf_sen_scheme == c('CLM4.5', 'custom'))) stop("Invalid input for 'crop_leaf_sen_scheme' in input_TEMIR_crop_extension.R")
 
+# When is foliage loss observed in crops?
+# Development index DVI (value from -1 to 2) following JULES-crop definition.
+# DVI: -1 (just planted); 0 (just emerged); 1 (just reaching reproductive stage); 2 (mature and harvested).
+# leaf senescence starts at DVI = 1.5 in JULES; DVI = 1.0 in CLM4.5 (equivalent).
 if (crop_leaf_sen_scheme == 'custom') {
+    # Modify this value with field data.
     leaf_senescence_DVI = 1.0
 } else {
+    # Declare missing variables. Do not modify this part. 
     leaf_senescence_DVI = NA
 }
 

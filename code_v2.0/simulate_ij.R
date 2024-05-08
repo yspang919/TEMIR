@@ -290,8 +290,12 @@ f_simulate_ij = function(IJ) {
              GDD_base_T = baset[ipft]; if (at_tropical_flag && any(ipft == c(18,19,24,25))) {GDD_base_T = 10}; if (at_tropical_flag && any(ipft == c(20,21))) {GDD_base_T = 12 - 0.4*abs(lat[j])}
              # Allocation ratio of coarse root : live stem
              allocRatio_croot.stem = croot_stem[ipft]
-             # Crop (0 = non-crop; 1 = crop):
+             # Crops (0 = non-crop; 1 = crop):
              crop_flag = crop[ipft]
+             maize_flag = if (any(PFT_df$PFT_description[ipft+1] == c('corn', 'irrigated_corn'))) 1 else 0
+             springwheat_flag = if (any(PFT_df$PFT_description[ipft+1] == c('spring_temperate_cereal', 'irrigated_spring_temperate_cereal'))) 1 else 0
+             winterwheat_flag = if (any(PFT_df$PFT_description[ipft+1] == c('winter_temperate_cereal', 'irrigated_winter_temperate_cereal'))) 1 else 0
+             soybean_flag = if (any(PFT_df$PFT_description[ipft+1] == c('soybean', 'irrigated_soybean'))) 1 else 0
              # C:N ratio of dead wood
              deadwd_cn = deadwdcn[ipft]
              # Through canopy (projected area basis) dSLA/dLAI (m^2 gC^-1):
@@ -314,9 +318,9 @@ f_simulate_ij = function(IJ) {
              grain_cn = graincn[ipft]
              # % of GDD_mat to reach reproductive stage
              # Note that this parameters for temperate soybean is changed from 0.7 in CLM4.5 to 0.5 in CLM5 according to the technical note. Here we adopt the parameter in CLM5
-             repr_GDDfraction = grnfill[ipft]; if (at_tropical_flag && any(ipft == c(18,19,24,25))) {repr_GDDfraction = 0.5}
+             repr_GDDfraction = grnfill[ipft]; if (at_tropical_flag && (maize_flag || soybean_flag)) {repr_GDDfraction = 0.5}
              # Maximum GDD_mat allowed for crops
-             GDDmat_max = hybgdd[ipft]; if (at_tropical_flag && any(ipft == c(24,25))) {GDDmat_max = 2100}
+             GDDmat_max = hybgdd[ipft]; if (at_tropical_flag && soybean_flag) {GDDmat_max = 2100}
              # Prescribed maximum LAI allowed for crops
              LAI_max = laimx[ipft]
              # C:N ratio of leaf
@@ -328,13 +332,13 @@ f_simulate_ij = function(IJ) {
              # C:N ratio of live wood
              liveWood_cn = livewdcn[ipft]
              # Daily min planting temperature requirment (K)
-             min_T_planting_req = min_planting_temp[ipft]; if (at_tropical_flag && any(ipft == c(18,19,24,25))) {min_T_planting_req = 283.15}
+             min_T_planting_req = min_planting_temp[ipft]; if (at_tropical_flag && (maize_flag || soybean_flag)) {min_T_planting_req = 283.15}
              # Maximum growing season length allowed
-             crop_season_length_max = mxmat[ipft]; if (at_tropical_flag && any(ipft == c(18,19))) {crop_season_length_max = 160}
+             crop_season_length_max = mxmat[ipft]; if (at_tropical_flag && maize_flag) {crop_season_length_max = 160}
              # Maximum increase in GDD_T2m per day
              GDDT2m_change_max = mxtmp[ipft]
              # Daily average planting temperature requirement (K)
-             avg_T_planting_req = planting_temp[ipft]; if (at_tropical_flag && any(ipft == c(18,19,24,25))) {avg_T_planting_req = 294.15}
+             avg_T_planting_req = planting_temp[ipft]; if (at_tropical_flag && (maize_flag || soybean_flag)) {avg_T_planting_req = 294.15}
              # CLM rooting distribution parameter a and b and the root fraction
              # This is now done in PFT_surf_data.R (Pang, Apr 2024)
              root_a_par = roota_par[ipft]
@@ -354,10 +358,10 @@ f_simulate_ij = function(IJ) {
              ztopmax = ztopmx[ipft]; if (at_tropical_flag && any(ipft == c(24,25))) {ztopmax = 1}
              # CLM4.5 planting period for crops
              # Not sure if the phenology in the SH tropical region in CLM5 is also 6 month later than the NH counterpart. Here we assume yes at the time being.
-             earliest_planting_doy_NH = earliest_planting_jday_possible_NH[ipft]; if (at_tropical_flag) {if (any(ipft == c(18,19))) {earliest_planting_doy_NH = 79} else if (any(ipft == c(24,25))) {earliest_planting_doy_NH = 105}}
-             latest_planting_doy_NH = latest_planting_jday_possible_NH[ipft]; if (at_tropical_flag) {if (any(ipft == c(18,19))) {latest_planting_doy_NH = 105} else if (any(ipft == c(24,25))) {latest_planting_doy_NH = 181}}
-             earliest_planting_doy_SH = earliest_planting_jday_possible_SH[ipft]; if (at_tropical_flag) {if (any(ipft == c(18,19))) {earliest_planting_doy_SH = 263} else if (any(ipft == c(24,25))) {earliest_planting_doy_SH = 288}}
-             latest_planting_doy_SH = latest_planting_jday_possible_SH[ipft]; if (at_tropical_flag) {if (any(ipft == c(18,19))) {latest_planting_doy_SH = 288} else if (any(ipft == c(24,25))) {latest_planting_doy_SH = 365}}
+             earliest_planting_doy_NH = earliest_planting_jday_possible_NH[ipft]; if (at_tropical_flag) {if (maize_flag) {earliest_planting_doy_NH = 79} else if (soybean_flag) {earliest_planting_doy_NH = 105}}
+             latest_planting_doy_NH = latest_planting_jday_possible_NH[ipft]; if (at_tropical_flag) {if (maize_flag) {latest_planting_doy_NH = 105} else if (soybean_flag) {latest_planting_doy_NH = 181}}
+             earliest_planting_doy_SH = earliest_planting_jday_possible_SH[ipft]; if (at_tropical_flag) {if (maize_flag) {earliest_planting_doy_SH = 263} else if (soybean_flag) {earliest_planting_doy_SH = 288}}
+             latest_planting_doy_SH = latest_planting_jday_possible_SH[ipft]; if (at_tropical_flag) {if (maize_flag) {latest_planting_doy_SH = 288} else if (soybean_flag) {latest_planting_doy_SH = 365}}
          }
          
          # [Crop model] read in site and PFT planting date (POD or BGC), harvesting date (POD only) and GDDmat (BGC only)
@@ -366,18 +370,18 @@ f_simulate_ij = function(IJ) {
                  # crop name in the Sack data set
                  # maize (primary growing season), soybean, wheat, winter wheat, rice (primary growing season), rice (secondary growing season), maize (secondary growing season)
                  # The regridded numbers may have decimal, round them to the nearest whole number (Pang, Jun 2019)
-                 if (any(ipft == c(18,19))) {
+                 if (maize_flag) {
                      if (crop_growing_season == 'primary') {
                          prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,1], digits = 0)
                          print(paste0('[Sack planting date] = ', prescribed_planting_date))
                      } else if (crop_growing_season == 'secondary') {
                          # prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,7], digits = 0)
                      } else {stop("'crop_growing_season' for Sack dataset is not correctly specified")}
-                 } else if (any(ipft == c(20,21))) {
+                 } else if (springwheat_flag) {
                      prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,2], digits = 0)
-                 } else if (any(ipft == c(22,23))) {
+                 } else if (winterwheat_flag) {
                      prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,3], digits = 0)
-                 } else if (any(ipft == c(24,25))) {
+                 } else if (soybean_flag) {
                      prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,4], digits = 0)
                  } else {
                      prescribed_planting_date = NA
@@ -488,7 +492,7 @@ f_simulate_ij = function(IJ) {
             theta_10m = if (FLUXNET_flag) T_10m + (g_E/c_p)*(Z_disp + Z_0m + 10) else T_10m*(P_surf/P_10m)^(R_da/c_p)
             # If "q_10m" is not provided, needed to scale it from the temperature difference (theta_10m - theta_2m).
             # Specific humidity (kg kg^-1):
-            q_10m = if (!exists('q_10m')) { if (H_sen == 0 ) q_2m else { q_2m + (theta_10m - theta_2m)*c_p*ET/H_sen }} else q_10m
+            q_10m = if (!exists('q_10m')) { if (H_sen == 0) q_2m else { q_2m + (theta_10m - theta_2m)*c_p*ET/H_sen }} else q_10m
             # Vapor pressure (Pa):
             e_10m = P_10m*q_10m/(0.622 + 0.378*q_10m)
             # Moist air density (kg m^-3):
@@ -1054,8 +1058,8 @@ f_simulate_ij = function(IJ) {
                         # TODO
                         # change of value name: T_soil1_daily
                         crop_phenology = f_crop_phenology(T_10_d = T_10d, T_min_10_d = Tmin_10d, T_soil = T_soil1_daily, T2m = T_daily,
+                                                          is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag,
                                                           leafC = leaf_C, livestemC = livestem_C, finerootC = fineroot_C, grainC = grain_C, LAI = LAI, SAI = SAI,
-                                                          CUO = CUO_BGC, CUO_grain_filling = CUO_grainfill,
                                                           GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDmat = GDD_mat, GDDrepr = GDD_repr, GDDemer = GDD_emer,
                                                           crop_living_flag = crop_live_flag, crop_planting_flag = crop_plant_flag, leaf_emer_flag = leaf_emergence_flag, grain_filling_flag = grain_fill_flag, harvesting_flag = harvest_flag,
                                                           prescribed_planting_date_readin = if (get_planting_date_option != 'CLM4.5') {prescribed_planting_date} else {NULL}, planting_jday = day_of_planting, grain_filling_jday = day_of_grain_filling, harvest_jday = day_of_harvest,
@@ -1063,19 +1067,19 @@ f_simulate_ij = function(IJ) {
                                                           GDDmat_M = ifelse(exists("GDDmat_maize"), yes = GDDmat_maize, no = NULL), GDDmat_S = ifelse(exists("GDDmat_soybean"), yes = GDDmat_soybean, no = NULL), GDDmat_SW = ifelse(exists("GDDmat_springwheat"), yes = GDDmat_wheat, no = NULL), GDDmat_WW = ifelse(exists("GDDmat_winterwheat"), yes = GDDmat_winterwheat, no = NULL),
                                                           hybgdd = GDDmat_max, GDD_baseT = GDD_base_T, GDD_maxIncrease = GDDT2m_change_max, max_growing_season_length = crop_season_length_max, leaf_longevity = leaflong, T_plant_req = avg_T_planting_req, T_min_plant_req = min_T_planting_req, repr_GDDfrac = repr_GDDfraction, emer_GDDfrac = emer_GDDfraction,
                                                           prescribed_min_plant_jday = ifelse(test = at_NH_flag, yes = earliest_planting_doy_NH, no = earliest_planting_doy_SH), prescribed_max_plant_jday = ifelse(test = at_NH_flag, yes = latest_planting_doy_NH, no = latest_planting_doy_SH),
-                                                          at_NH_flag = at_NH_flag, ipft = ipft)
+                                                          at_NH_flag = at_NH_flag)
                         
                         # Receive the outputs from the function using assign() instead of explicitly writing them out if the function has too many outputs (>10)
                         # i.e. assign(x = simulateIJ_crop_phenology_variable_name, value = f_crop_phenology[[f_crop_phenology_output_listvariable_name]])
                         simulateIJ_crop_phenology_variable_name = c("crop_emergence_flux","leaf_C_loss_flux","grain_C_loss_flux","livestem_C_loss_flux","fineroot_C_loss_flux",
                                                                     "crop_live_flag","crop_plant_flag","leaf_emergence_flag","grain_fill_flag","harvest_flag",
                                                                     "day_of_planting", "day_of_grain_filling", "day_of_harvest",
-                                                                    "GDDT2m","GDDTsoil", "GDD_mat", "GDD_repr", "GDD_emer",
+                                                                    "GDDT2m","GDDTsoil", "GDD_mat", "GDD_repr", "GDD_emer", "DVI",
                                                                     "leaf_C","grain_C","fineroot_C","livestem_C","LAI","SAI")
                         f_crop_phenology_output_listvariable_name = c("seedC_to_leafC_flux","leafC_loss_flux","grainC_loss_flux","livestemC_loss_flux", "finerootC_loss_flux",
                                                                       "croplive_flag", "cropplant_flag","leafemergence_flag","grainfill_flag", "har_flag",
                                                                       "planting_julianday", "grain_filling_julianday", "harvesting_julianday",
-                                                                      "GDD_T2m","GDD_Tsoil", "GDDmat", "GDDrepr", "GDDemer",
+                                                                      "GDD_T2m","GDD_Tsoil", "GDDmat", "GDDrepr", "GDDemer", "DVI",
                                                                       "leafC","grainC","finerootC","livestemC","LAI_out","SAI_out")
                         
                         # print(paste0('[simulated.ij] after crop_phenology leafC = ', signif(leaf_C, 5)))

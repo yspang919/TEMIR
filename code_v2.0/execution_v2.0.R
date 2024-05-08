@@ -570,7 +570,9 @@ for (d in 1:n_day_sim) {
          nc_close(nc)
          
        } else if (T_soil_source == 'custom') {
-         # Implement your code to read soil temperature input
+         # Implement your code to read daily soil temperature input (in K)
+         # The dimension of the input should be [lon, lat, hour] for global/regional simulations, [1,1,hour] for single-site simulations
+         
        }
    }
    
