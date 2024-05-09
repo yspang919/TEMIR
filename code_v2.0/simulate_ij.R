@@ -1025,7 +1025,7 @@ f_simulate_ij = function(IJ) {
                 An_daily = An_daily + An_timestep
                 mr_daily = mr_daily + mr_timestep
                 if (h == 24/dt_hr) {
-                   # daily gross primary productivity (umolCO2 m^-2 s^-1) and maintenance respiration (gC m^-2 s^-1)
+                   # Daily gross primary productivity (umolCO2 m^-2 s^-1) and maintenance respiration (gC m^-2 s^-1)
                    An_daily = An_daily / (24/dt_hr)
                    mr_daily = mr_daily / (24/dt_hr)
                    # print(paste0('[simulated_ij.R] dailyMean_An = ', signif(dailyMean_An * 12.011e-6,4), ' gCm-2s-1  dailyMean_mr = ', signif(dailyMean_mr,4),' gCm-2s-1'))
@@ -1035,9 +1035,9 @@ f_simulate_ij = function(IJ) {
                 # Time step: 1 day
                 if (h == 24/dt_hr){
                    
-                   ### crop-ozone sensitivity is derived from top canopy leaves, therefore we use CUO_sun rather than CUO_can
-                   ### use this value to track CUO at different growing stages
-                   CUO_BGC = canopy_photosyn$CUO_sun
+                   ### Crop-ozone sensitivity is derived from top canopy leaves measurements of An in soyFACE, therefore we use CUO_sun rather than CUO_can
+                   ### Use this value to track CUO at different growing stages
+                   # CUO_BGC = canopy_photosyn$CUO_sun
 
                     # Plant phenology and allocation of assimilated carbon
                     if (evergreen_flag) {
@@ -1082,17 +1082,18 @@ f_simulate_ij = function(IJ) {
                                                                       "GDD_T2m","GDD_Tsoil", "GDDmat", "GDDrepr", "GDDemer", "DVI",
                                                                       "leafC","grainC","finerootC","livestemC","LAI_out","SAI_out")
                         
-                        # print(paste0('[simulated.ij] after crop_phenology leafC = ', signif(leaf_C, 5)))
-                        
                         if (length(simulateIJ_crop_phenology_variable_name) != length(f_crop_phenology_output_listvariable_name)){stop("[simulate_ij.R f_crop_phenology] length(simulateIJ_crop_phenology_variable_name) != length(f_crop_phenology_output_listvariable_name)")}
                         for (z in seq(simulateIJ_crop_phenology_variable_name)){assign(x = simulateIJ_crop_phenology_variable_name[z], value = crop_phenology[[f_crop_phenology_output_listvariable_name[z]]])}
                         rm(z, simulateIJ_crop_phenology_variable_name, f_crop_phenology_output_listvariable_name)
                         
                         # Fluxes of the allocation of assimilated carbon
-                        crop_allocation_fluxes = f_crop_allocation_fluxes(A_can_umolm2s1 = An_daily, mr_total = mr_daily, gr_fraction = if (ipft >= 18) {0.25} else {0.3}, 
-                                                                          GDDmat = GDD_mat, GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDemer = GDD_emer, GDDrepr = GDD_repr, crop_living_flag = crop_live_flag, peak_lai_flag = peak_LAI_flag, grain_filling_flag = grain_fill_flag,
+                        crop_allocation_fluxes = f_crop_allocation_fluxes(A_can_umolm2s1 = An_daily, mr_total = mr_daily, gr_fraction = if (crop_flag && !stress_decid_flag) 0.25 else 0.3, 
+                                                                          is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag,
+                                                                          GDDmat = GDD_mat, GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDemer = GDD_emer, GDDrepr = GDD_repr, DVI_JULES = DVI, 
+                                                                          crop_living_flag = crop_live_flag, peak_lai_flag = peak_LAI_flag, grain_filling_flag = grain_fill_flag,
                                                                           astem_leafem = a_stem_leafem, aleaf_leafem = a_leaf_leafem, aleaf = a_leaf, astem = a_stem,
                                                                           bfact = b_factor, arooti = a_root_initial, arootf = a_root_final, astemf = a_stem_final, declfact = GDD_decline_factor, allconss = a_stem_alloc_power, aleaff = a_leaf_final, allconsl = a_leaf_alloc_power, lfemerg = emer_GDDfraction, fleafi = a_leaf_base)
+                        
                         simulateIJ_crop_allocation_variable_name = c("leaf_C_alloc_flux","fineroot_C_alloc_flux","livestem_C_alloc_flux","deadstem_C_alloc_flux","livecoarseroot_C_alloc_flux","deadcoarseroot_C_alloc_flux","grain_C_alloc_flux",
                                                                      "a_stem","a_leaf","a_root","a_repr","a_stem_leafem","a_leaf_leafem")
                         f_crop_allocation_output_listvariable_name = c("leaf_carbon_partitioning_flux_gCm2s1","fineroot_carbon_partitioning_flux_gCm2s1","livestem_carbon_partitioning_flux_gCm2s1","deadstem_carbon_partitioning_flux_gCm2s1","livecoarseroot_carbon_partitioning_flux_gCm2s1","deadcoarseroot_carbon_partitioning_flux_gCm2s1","grain_carbon_partitioning_flux_gCm2s1",
