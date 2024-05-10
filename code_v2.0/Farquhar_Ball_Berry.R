@@ -11,6 +11,7 @@
 # Oct 2018: Added new "Medlyn" stomatal conductance scheme. (Sun)
 # Feb 2019: Modified the way L_sun and L_sha are defined and calculated. We believe that A_can, R_can and g_can should be scaled up by LAI only, not by LAI + SAI. Therefore, L_sun and L_sha here should be sunlit and shaded leaf area index, not plant area index, but we still consider both LAI and SAI when calculating light extinction. Now they are renamed "LAI_sun" and "LAI_sha" and "LAI_sun" has to taken explicitly from canopy radiative transfer model. (Tai)
 # Feb 2019: Now modified such that "g_ah" (aerodynamic conductance for heat, umol m^-2 s^-1 or m s^-1) is used instead of "g_am". (Tai, Feb 2019)
+# Apr 2020: Added "f_Kn_Kb" to scale "R_d25" in f_leaf_photosyn(). Not sure if "R_d25" needs to be adjusted for daylength in this case. (Tai, Apr 2020)
 
 ################################################################################
 ### Functions:
@@ -118,7 +119,7 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
     # 2. If "e_a" (Pa) adn "c_a" (Pa) and "g_b" (umol m^-2 s^-1 or m s^-1) are given, it calculates "g_s" via solving a quadratic equation using:
     #   e_s = (e_a/g_s+e_i/g_b)/(1/g_b+1/g_s)
     #   e_vpd = e_i-e_s
-    #   g_s = 1.6*(1+m/e_vpd^0.5)*A_n*P_atm/c_s
+    #   g_s = 1.6*(1+m/e_vpd^0.5)*A_n*P_atm/c_s + b
     # Medlyn et al. 2011
     
     # Saturation vapor pressure at leaf temperature (Pa):
@@ -151,7 +152,7 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
                
                 # put constraints on RH/vpd in MED mode
                 e_vpd = max(e_sat - e_s, 50)*0.001
-                g_s = 1.6*(1 + m/(e_vpd^0.5))*A_n/(c_s/P_atm)
+                g_s = 1.6*(1 + m/(e_vpd^0.5))*A_n/(c_s/P_atm) + b
             } else {
                 if (is.null(c_a) | is.null(e_a) | is.null(g_b)) stop('All of c_a, e_a and g_b need to be specified.')
                 if (met_cond) g_b = g_b/mol_to_met
@@ -179,8 +180,7 @@ f_stomatal_cond = function(A_n, c_s=NULL, e_s=NULL, c_a=NULL, e_a=NULL, g_b=NULL
                     }
                     c_s = max(c(1e-6, (c_a - (1.4/g_b)*P_atm*A_n)), na.rm=TRUE)
                     gs_roots = quadroot(a=c_s, b=(c_s*(g_b - b) - m*A_n*P_atm), c=(-g_b*(c_s*b + m*A_n*P_atm*e_a/e_sat)))
-                    g_s = max(gs_roots, na.rm=TRUE)
-                    
+                    g_s = max(gs_roots, na.rm=TRUE)           
                 }
             }
         }
@@ -247,6 +247,7 @@ f_leaf_photosyn = function(c_i, phi, T_v=298.15, P_atm=101325, C3_plant=TRUE, V_
    # *** Now modified such that if "canopy_avg=TRUE", "SAI" need not be provided, but the sunlit leaf area index, "LAI_sun", has to explicitly provided. (Tai, Feb 2019)
     # Canopy scaling uses the nitrogen and light extinction coefficient, "K_n" and "K_b", respectively.
     # If "biogeochem=TRUE", leaf mitochondrial respiration at 25 degC "R_d25" is calculated using leaf nitrogen concentration "leaf_N_conc" (g N m^-2 leaf area).
+
     # Canopy scaling:
     if (canopy_avg) {
         # if (is.null(LAI) | is.null(SAI) | is.null(sunlit)) stop('LAI, SAI or sunlit parameters have to be provided to calculate canopy averages.')
@@ -280,12 +281,13 @@ f_leaf_photosyn = function(c_i, phi, T_v=298.15, P_atm=101325, C3_plant=TRUE, V_
     
     # Maximum rate of carboxylation at 25 degC adjusted for daylength (umol CO2 m^-2 s^-1):
     V_cmax25 = V_cmax25_0*f_Kn_Kb*f_DYL
-    
+
     # Calculate leaf mitochondrial respiration both day and night:
     # Leaf mitochondrial respiration at 25 degC (umol CO2 m^-2 s^-1):
     if (biogeochem) {
         if (is.null(leaf_N_conc)) stop('leaf_N_conc has to be specified.')
-        R_d25 = 0.2577*leaf_N_conc
+        R_d25 = 0.2577*leaf_N_conc*f_Kn_Kb
+        # Added "f_Kn_Kb" to scale "R_d25" above. Not sure if it needs to be adjusted for daylength. (Tai, Apr 2020)
     } else {
         if (C3_plant) R_d25 = 0.015*V_cmax25 else R_d25 = 0.025*V_cmax25
     }
@@ -448,8 +450,7 @@ f_ozone_impact = function(O3_conc, g_s, g_b, g_ah, P_atm=101325, theta_atm=298.1
     # Convert from ppb to nmol m^-3:
     O3_conc_nmol = O3_conc*P_atm/(theta_atm*R_uni)
     # O3:H2O resistance ratio defined by Sitch et al. (2007):
-    # k_O3 = 1.67
-    k_O3 = 1.61
+    k_O3 = 1.67
     # Instantaneous ozone flux (nmol m^-2 s^-1):
     O3_flux = O3_conc_nmol/(k_O3/g_s + 1/g_b + 1/g_ah)
     # This follows Lombardozzi et al. [2015], but it seems more appropriate to use g_ah or g_aw instead of g_am to calculate ozone flux.
@@ -458,8 +459,8 @@ f_ozone_impact = function(O3_conc, g_s, g_b, g_ah, P_atm=101325, theta_atm=298.1
     if (scheme == 'Lombardozzi') {
         
         # Add a threshold of uptake (nmol m^-2 s^-1):
-        # O3_flux_th = 0.8
-        O3_flux_th = 4  # derived from soyFACE, apply for soybean only
+        O3_flux_th = 0.8
+        # O3_flux_th = 4  # derived from soyFACE experiments, apply to soybean only
         O3_flux_crit = max(c(0, (O3_flux - O3_flux_th)), na.rm=TRUE)
         # Model time step in hr:
         dt_hr = dt/3600
@@ -527,7 +528,7 @@ f_ozone_impact = function(O3_conc, g_s, g_b, g_ah, P_atm=101325, theta_atm=298.1
             grass_gs_int = 0.7511
             grass_gs_slope = 0
         } else if (sensitivity == 'custom') {
-            # for soyFACE simulation only
+            # for soyFACE simulations only
             grass_An_int = 1
             grass_An_slope = -0.0179
             grass_gs_int = 1
@@ -607,7 +608,7 @@ f_ci = function() {
     g_s = f_stomatal_cond(A_n=A_n, c_a=c_a, e_a=e_a, g_b=g_b, T_v=T_v, P_atm=P_atm, beta_t=beta_t, C3_plant=C3_plant, met_cond=FALSE, g1_med=g1_med)
     # Revised "c_i":
     ci_new = c_a - (1.4/g_b + 1.6/g_s)*P_atm*A_n
-    if (A_n <= 0) fval = 0 else fval = c_i - ci_new
+    if (leaf_photosyn$A <= 0) fval = 0 else fval = c_i - ci_new
     output = list(fval=fval, c_i=ci_new, g_s=g_s, A_n=A_n, R_d=R_d)
     return(output)
 }
@@ -634,8 +635,8 @@ f_ci2 = function() {
     O3_coef_An_new = ozone_impact$O3_coef_An
     # Revised "c_i":
     ci_new = c_a - (1.4/g_b + 1.6/g_s)*P_atm*A_n
-    if (A_n <= 0) fval = 0 else fval = c_i - ci_new
-    if (A_n <= 0) gval = 0 else gval = O3_coef_An - O3_coef_An_new
+    if (leaf_photosyn$A <= 0) fval = 0 else fval = c_i - ci_new
+    if (leaf_photosyn$A <= 0) gval = 0 else gval = O3_coef_An - O3_coef_An_new
     output = list(fval=fval, gval=gval, c_i=ci_new, O3_coef_An=O3_coef_An_new, g_s=g_s, A_n=A_n, R_d=R_d)
     return(output)
 }
@@ -953,8 +954,8 @@ f_canopy_photosyn = function(c_a, e_a, phi_sun, phi_sha, T_v=298.15, P_atm=10132
 
 # Soil water stress function (0 to 1):
 # This is to be applied to V_cmax, R_d and minimum stomatal conductance (b) when calculating photosynthesis.
-f_water_stress = function(soil_wetness=NULL, theta_w=NULL, theta_sat=NULL, psi_sat, b_psi, psi_c, psi_o, multilayer=FALSE) {
-    # Soil wetness (i.e. % saturation): soil_wetness
+f_water_stress = function(soil_wetness=NULL, soil_wetness_top=NULL, soil_wetness_bottom=NULL, theta_w=NULL, theta_sat=NULL, psi_sat, b_psi, psi_sat_top, b_psi_top, psi_sat_bottom, b_psi_bottom, psi_c, psi_o, root_frac_in_top, multilayer) {
+    /# Soil wetness (i.e. % saturation): soil_wetness
     # Volumetric soil water content (fraction): theta_w
     # Saturated volumetric water content (fraction): theta_sat
     # Either soil_wetness or (theta_w, theta_sat) have to be specified.
@@ -964,10 +965,28 @@ f_water_stress = function(soil_wetness=NULL, theta_w=NULL, theta_sat=NULL, psi_s
     # Soil matric potential when stomata are fully closed (mm): psi_c
     # Soil matric potential when stomata are fully opened (mm): psi_o
     # We assume an ice-free soil. The capacity to consider ice is under development.
-    if (multilayer) {
+    if (multilayer == 'multilayer') {
         # A multilayer soil column model to calculate soil physics is under development and not available at the moment.
         stop('Multilayer model is not available in the current version.')
-    } else {
+    } else if (multilayer == 'two-layer') {
+        if (is.null(soil_wetness_bottom)) soil_wetness_bottom = theta_w/theta_sat
+        if (is.null(soil_wetness_top)) soil_wetness_top = theta_w/theta_sat
+        soil_wetness_bottom = max(c(0.01, soil_wetness_bottom), na.rm=TRUE)
+        soil_wetness_top = max(c(0.01, soil_wetness_top), na.rm=TRUE)
+        # We use a bulk parameterization for soil aggregate root zone.
+        psi = max(c(psi_c, psi_sat_bottom*soil_wetness_bottom^-b_psi_bottom), na.rm=TRUE)
+        # Soil matric potential of top soil layer
+        psi_top = max(c(psi_c, psi_sat_top*soil_wetness_top^-b_psi_top), na.rm=TRUE)
+        # Plant wilting factor (bulk):
+        wilt_factor = min(c(max(c(0, (psi_c - psi)/(psi_c - psi_o)), na.rm=TRUE), 1), na.rm=TRUE)
+        # Plant wilting factor (top soil layer):
+        wilt_factor_top = min(c(max(c(0, (psi_c - psi_top)/(psi_c - psi_o)), na.rm=TRUE), 1), na.rm=TRUE)
+        # Multiply by a scaling factor for match multilayer model results. It is set to be one for now.
+        #gamma = 1
+        #beta_t = wilt_factor*gamma
+        beta_t = wilt_factor_top * root_frac_in_top + wilt_factor * (1 - root_frac_in_top)
+        return(beta_t)
+    } else if (multilayer == 'bulk') {
         if (is.null(soil_wetness)) soil_wetness = theta_w/theta_sat
         soil_wetness = max(c(0.01, soil_wetness), na.rm=TRUE)
         # We use a bulk parameterization for soil aggregate root zone.
