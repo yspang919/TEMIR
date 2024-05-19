@@ -955,7 +955,7 @@ f_canopy_photosyn = function(c_a, e_a, phi_sun, phi_sha, T_v=298.15, P_atm=10132
 # Soil water stress function (0 to 1):
 # This is to be applied to V_cmax, R_d and minimum stomatal conductance (b) when calculating photosynthesis.
 f_water_stress = function(soil_wetness=NULL, soil_wetness_top=NULL, soil_wetness_bottom=NULL, theta_w=NULL, theta_sat=NULL, psi_sat, b_psi, psi_sat_top, b_psi_top, psi_sat_bottom, b_psi_bottom, psi_c, psi_o, root_frac_in_top, multilayer) {
-    /# Soil wetness (i.e. % saturation): soil_wetness
+    # Soil wetness (i.e. % saturation): soil_wetness
     # Volumetric soil water content (fraction): theta_w
     # Saturated volumetric water content (fraction): theta_sat
     # Either soil_wetness or (theta_w, theta_sat) have to be specified.

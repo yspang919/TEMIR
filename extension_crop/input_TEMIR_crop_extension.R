@@ -6,8 +6,8 @@
 ## TODO
 # 'single-layer' root fraction (really needed?)
 # variable 'growing_season' for POD3 and Sack
-# change of flag name for the crop model e/g/. user_defined_crop_GDD_accmulation_flag --> GDD_calculation_method
 # change translocation in JULES
+# maintenance respiration might be underestimated all the time, soil T is measured at the bottom of a soil layer. There is surface skin temperature in the MERRA 2 input (can be handle easily in the future), but surface temperature is not included in the FLUXNET site (how shohld we implemented it). At the time beingthe old (and not so accurate) scheme is used.
 
 # Additional directories required for the crop model / biogeochemistry extension
 
@@ -40,12 +40,14 @@ optional_dirs = c(optional_dirs, 'planting_date_map_dir', 'GDDx_map_dir', 'Sack_
 T_soil_source = 'MERRA2'
 
 # The depth of the bottom of the soil layer of the soil temperature input (in m) for the calculation of root fraction
-# For single-layer soil temperature data input, please enter NA (even if the depth is provided)
+# For single-layer soil temperature data input, T_soil_depth does not need to be specified (NA) as root fraction calculations are not needed.
 if (T_soil_source == 'MERRA2') {
   T_soil_depth_array = c(0.0988, 0.2940, 0.6799, 1.4425, 2.9496)
+  # Top 10, 30, 70, 150, 300 cm soil contains at least 40, 60, 75, 85, 95% of total root by mass for all PFTs, respectively
+  # For crops PFTs, more than 90% of the root is in the top 70 cm of soil.
 } else if (T_soil_depth == 'custom') {
   # T_soil_depth = c(...)
-  # T_soil_dpeth = NA
+  # T_soil_depth = NA
 }
 
 # Obsolete**
@@ -118,7 +120,7 @@ if (crop_planting_date_method == 'prescribed-site') {
 }
 
 ## How is the growing degree day (GDD) requirement for crop reaching maturity (GDDmat) determined? ('CLM4.5', 'prescribed-map', 'prescribed-site')
-# 'CLM4.5': GDDmat are derived from 20-year running mean of GDD0, GDD8 and GDD10 (GDDx) as described in the CLM4.5 technical note. This method assumes farmers will adapt to local climate and use seeds with different growing season length, though the reliability of the scheme has to be considered.
+# 'CLM4.5': GDDmat are derived from 20-year running mean of GDD0, GDD8 and GDD10 (GDDx) as described in the CLM4.5 technical note. This method assumes farmers will adapt to local climate and use seeds with different growing season length.
 # 'prescribed-map': read in a regional/global map that contains GDDmat (in growing degree day) for different crops. The default input file contains GDDmat values derived using the planting and harvesting complied by Sack et al (2010). The GDDmat value in the file is the average GDDmat from year 1995 to year 2015 (assuming fixed planting and harvesting date). 
 # 'prescribed-site': enter a single GDDmat value (in growing degree day). Suitable for single-site simulations with pre-determined GDDmat.
 

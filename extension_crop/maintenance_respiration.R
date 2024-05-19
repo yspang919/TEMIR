@@ -2,13 +2,19 @@
 ### Module for calculating maintenance respirations
 ################################################################################
 
+# TODO
+
+# Currently, the length of root_frac_array is longer than T_soil_array by 1 if multilayer soil temperature input is used. Values in root_frac_array is the PFT-specific root fraction between two soil layers (total 6 layers). Values in T_soil_array is the soil temperature at the boundary of two soil layers (total 5 boundaries in MERRA2). Maintenance respirations might be underestimated during the day time and overestimated during night time... (soil temperature is measured at the bottom of a soil layer).
+
+# Future solution 1: estimated the soil temperature at the depth where cummulative root fracation = 50 % for each PFT, then use this temperature to calculate MR. (essentially become a bulk soil layer, easier to implement but may lose some accuracy). The depth where cummulative root fraction = 50% is between 10 - 30cm (between TSOIL1 and TSOIL2, see input_TEMIR_crop_extension.R).
+
+# Future solution 2: get the surface skin temperature from another MERRA2 input file, then estimate the soil temperature at the middle of each layer, follow by the MR calculation for each soil layer.  (more accurate? but at the same time we need to download another set of MERRA2 file just for the skin surface temperature, skin surface temperature is not included in the same file as T_soil)
+
 ################################################################################
 ### Functions:
 ################################################################################
 
-f_maintenance_respiration_fluxes_CLM45 = function(woody.flag, soil_depth_array, T_soil_array, T_2M,
-                                            leaf_N, livestem_N, livecoarseroot_N, fineroot_N, grain_N,
-                                            root_frac) {
+f_maintenance_respiration_fluxes_CLM45 = function(root_frac_array, T_soil_array, T_2M, leaf_N, livestem_N, livecoarseroot_N, fineroot_N, grain_N) {
     
     # This function calculates the hourly maintenance respiration rate of PFTs
     # Plant nitrogen is not simulated in this version of TEMIR. It is inferred from plant carbon pools and prescribed PFT-specific plant C:N ratio.
@@ -28,15 +34,24 @@ f_maintenance_respiration_fluxes_CLM45 = function(woody.flag, soil_depth_array, 
     mr_grain = grain_N * mr_perN_20C * q10_mr ^ ((T_2m_degC - 20) / 10)
     mr_coarseroot = livecoarseroot_N * mr_perN_20C * q10_mr ^ ((T_2m_degC - 20) / 10)
     
-    if (length(T_soil_array) != length(root_frac)) warnings('The number of soil layer in the soil temperature input (length of "T_soil_array" in simulate_ij.R) does not match the number of soil layer in the calculation of root fraction (length of "root_frac_Tsoil_pft" in simulate_ij.R).')
+    # This check does not work at the time being.
+    # if (length(T_soil_array) != length(root_frac_array)) warnings('The number of soil layer in the soil temperature input (length of "T_soil_array" in simulate_ij.R) does not match the number of soil layer in the calculation of root fraction (length of "root_frac_Tsoil_pft" in simulate_ij.R).')
     
-    # Sum of the fine root maintenance respiration at different soil layers weighted by root fraction.  
-    mr_fineroot = 0
-    for (layer in 1:length(root_frac)){
-        mr_fineroot = mr_fineroot + (fineroot_N * mr_perN_20C * q10_mr ^ ((T_soil_array_degC[layer] - 20) / 10)) * root_frac[layer]
+    # Sum of the fine root maintenance respiration at different soil layers weighted by root fraction.
+    # TODO:
+    # Temporary separating the calculation for single layer and mutliple layer T_soil input 
+    # -1 in "for (layer in ...)" is the temporary solution for the addition layer in root_frac_array 
+    if (length(root_frac_array) == 1 && length(T_soil_array) == 1) {
+        mr_fineroot_total = fineroot_N * mr_perN_20C * q10_mr^ ((T_soil_array_degC - 20) / 10)
+    } else {
+        mr_fineroot_total = 0
+        for (layer in 1:(length(root_frac_array)-1)) {
+            mr_fineroot_layer = (fineroot_N * mr_perN_20C * q10_mr ^ ((T_soil_array_degC[layer] - 20) / 10)) * root_frac_array[layer]
+            mr_fineroot_total = mr_fineroot_total + mr_fineroot_layer
+        }
     }
-        
-    output = list(mr_leaf = mr_leaf, mr_livestem = mr_livestem, mr_grain = mr_grain, mr_coarseroot = mr_coarseroot, mr_fineroot = mr_fineroot,
+    
+    output = list(mr_leaf = mr_leaf, mr_livestem = mr_livestem, mr_grain = mr_grain, mr_coarseroot = mr_coarseroot, mr_fineroot = mr_fineroot_total,
                   mr_total = (mr_leaf + mr_livestem + mr_grain + mr_coarseroot + mr_fineroot))
     
     return(output)

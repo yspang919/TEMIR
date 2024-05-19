@@ -88,7 +88,7 @@ f_simulate_ij = function(IJ) {
    lat_rad = lat[j]/180*pi
    
    # Geopotential height of surface (m): 
-   if (FLUXNET_flag){
+   if (FLUXNET_flag) {
       site_info = if (file.exists(paste0(FLUXNET_dir, 'FLUXNET_site_info.xlsx'))) read_excel(path = paste0(FLUXNET_dir, 'FLUXNET_site_info.xlsx')) else read_excel(path = paste0(FLUXNET_dir, 'FLUXNET_site_info.xlsx'))
       site_ind = match(FLUXNET_site_id, site_info$SITE_ID)
       Z_surf = as.double(unname(site_info[site_ind,"LOCATION_ELEV"]))
@@ -98,7 +98,7 @@ f_simulate_ij = function(IJ) {
    } else {
       Z_surf = PHIS[i,j]/g_E
    }
-   # Daily mean 2-m air and soil temperature (K):
+   # Daily mean 2m air and soil temperature (K):
    T_daily = mean(T2M[i,j,], na.rm=TRUE)
    Tmin_daily = min(T2M[i,j,], na.rm=TRUE)
    if (biogeochem_flag) {
@@ -155,7 +155,7 @@ f_simulate_ij = function(IJ) {
    # 3rd dim of "soil albedo" = [dry (visible), dry (Near IR), saturated (visible), saturated (Near IR)]
    alpha_soil_dry = soil_albedo[i,j,1]
    alpha_soil_sat = soil_albedo[i,j,3]
-
+   
    # Other model parameters:
    met_cond_flag = TRUE
    colimit_flag = TRUE
@@ -339,11 +339,8 @@ f_simulate_ij = function(IJ) {
              GDDT2m_change_max = mxtmp[ipft]
              # Daily average planting temperature requirement (K)
              avg_T_planting_req = planting_temp[ipft]; if (at_tropical_flag && (maize_flag || soybean_flag)) {avg_T_planting_req = 294.15}
-             # CLM rooting distribution parameter a and b and the root fraction
-             # This is now done in PFT_surf_data.R (Pang, Apr 2024)
-             root_a_par = roota_par[ipft]
-             root_b_par = roota_par[ipft]
-             root_frac_Tsoil_pft = root_frac_Tsoil[ipft, ] # from PFT_surf_data, array of root_frac (mutlilayer soil) or value of 1 (single layer soil)
+             # Root fraction for the calculation of maintenance respiration
+             root_frac_Tsoil_pft = root_frac_Tsoil[ipft,]
              # Seasonal deciduous PFT:
              season_decid_flag = (season_decid[ipft] == 1)
              # Specific leaf area (SLA) at top of canopy (projected area basis) (m^2 gC^-1):
@@ -455,7 +452,7 @@ f_simulate_ij = function(IJ) {
             # q_10m = QV10M[i,j,h]
             # Wind speed at 10 m above displacement height (m s^-1):
             u_10m = if (FLUXNET_flag) WS[i,j,h] else sqrt(U10M[i,j,h]^2 + V10M[i,j,h]^2)
-
+            
             # Variables below are needed for dry deposition (Sun, Oct 2018):
             # Liquid Precipitation (kg m-2 s-1): 
             prec_liq = if (FLUXNET_flag) PRECTOT[i,j,h] else PRECTOT[i,j,h] - PRECSNO[i,j,h] 
@@ -492,12 +489,12 @@ f_simulate_ij = function(IJ) {
             theta_10m = if (FLUXNET_flag) T_10m + (g_E/c_p)*(Z_disp + Z_0m + 10) else T_10m*(P_surf/P_10m)^(R_da/c_p)
             # If "q_10m" is not provided, needed to scale it from the temperature difference (theta_10m - theta_2m).
             # Specific humidity (kg kg^-1):
-            q_10m = if (!exists('q_10m')) { if (H_sen == 0) q_2m else { q_2m + (theta_10m - theta_2m)*c_p*ET/H_sen }} else q_10m
+            q_10m = if (!exists('q_10m')) { if (H_sen == 0) q_2m else {q_2m + (theta_10m - theta_2m)*c_p*ET/H_sen }} else q_10m
             # Vapor pressure (Pa):
             e_10m = P_10m*q_10m/(0.622 + 0.378*q_10m)
             # Moist air density (kg m^-3):
             rho_10m = (P_10m - 0.378*e_10m)/(R_da*T_10m)
-
+            
             # # Impose that "u_10m" cannot be smaller than "u_star" or 1:
             # if (u_10m < u_star) u_10m = u_star
             # if (u_10m < 1) u_10m = 1
@@ -636,7 +633,7 @@ f_simulate_ij = function(IJ) {
             
             # Canopy air temperature (K):
             # Surface temperature (at displacement height) is used as a proxy for canopy air temperature.
-            T_a = if (Monin_Obukhov_flag) Monin_Obukhov$T_s else T_2m
+            T_a = if (infer_canopy_met_flag) Monin_Obukhov$T_s else T_2m
             # Vegetation temperature (K):
             # Canopy air temperature is used as a proxy for vegetation temperature.
             T_v = T_a
@@ -669,7 +666,6 @@ f_simulate_ij = function(IJ) {
             # Soil volumetric water content for top soil (0-1):
             # ... (Ma, Sep 2019)
             # theta_wtop = theta_sat*soil_wetness_top
-            # Soil volumetric water content for top soil (0-1):
             theta_wtop = theta_sat*soil_wetness_top
             # Cloud fraction (0-1):
             cldtot = CLDTOT[i,j,h]
@@ -691,7 +687,7 @@ f_simulate_ij = function(IJ) {
             
             # Ozone concentration in air
             if (!O3_fixed_flag) O3_conc = O3_hourly[i,j,(n_day_whole-1)*24+h]
-
+            
             # Cumulative ozone update from previous time step (mmol m^-2):
             if (!O3_damage_flag) {
                CUO_prev_sun = 0
@@ -803,10 +799,10 @@ f_simulate_ij = function(IJ) {
                # surf_alb_beam = canopy_albedo$I_beam_up
                # surf_alb_diff = canopy_albedo$I_diff_up
                # In theory surf_alb_beam and surf_alb_diff should be NA if LAI and SAI = 0, but it would cause error when saving the array as ncdf4, so we just put a zero here.
-               surf_alb_beam = if (LAI != 0 || SAI != 0) {canopy_albedo$I_beam_up} else {NA}
-               surf_alb_diff = if (LAI != 0 || SAI != 0) {canopy_albedo$I_diff_up} else {NA}
+               surf_alb_beam = if (LAI != 0 || SAI != 0) canopy_albedo$I_beam_up else NA
+               surf_alb_diff = if (LAI != 0 || SAI != 0) canopy_albedo$I_diff_up else NA
             } else if (radiative_scheme == 'Beer') {
-              
+               
                # Use simplified radiative transfer scheme that is consistent with Zhang et al. (2002) dry deposition mechanisms to override "phi_sun", "phi_sha", "LAI_sun", "LAI_sha" and "K_b" from default model above: (Tai, Feb 2019)
                
                # Absorbed photosynthetically active radiation by sunlit vs. shaded leaves (W m^-2):
@@ -831,7 +827,7 @@ f_simulate_ij = function(IJ) {
             ####################################################################
 
             # Soil water stress function:
-            # Should we also 'irrigated' c3_irrigated? (Pang, May 2024)
+            # Should we also 'irrigate' unmanaged crop c3_irrigated? (Pang, May 2024)
             if (any(PFT_df$PFT_description[ipft+1] == c('c3_irrigated',
                                                         'irrigated_corn',
                                                         'irrigated_spring_temperate_cereal',
@@ -894,7 +890,7 @@ f_simulate_ij = function(IJ) {
             # Canopy-integrated stomatal resistance (s m^-1):
             R_s = min(c(1/(canopy_photosyn$g_s * (LAI_sun + LAI_sha)), 1e7), na.rm=TRUE)
             
-            # Calculate dry deposition velocity (now only for ozone):
+            # Calculate dry deposition velocity (now ONLY for ozone):
             if (!is.null(drydep_scheme)) {
                
                if (drydep_scheme == 'Wesely') {
@@ -966,10 +962,10 @@ f_simulate_ij = function(IJ) {
                   # new PAR calculation (Anthony) 
                   v_d = f_drydep_Zhang(rho = rho_atm, T.s = T_2m, H = H_sen, 
                                       z0 = Z_0m, cz = (Z_atm + Z_0m), r_s = R_s, 
-                                      use_temir_rs = use_TEMIR_gs_flag, 
+                                      use_temir_rs = (gs_scheme_type == 'ecophysiological'), 
                                       r_a = 1/g_ah, 
-                                      use_temir_ra = use_TEMIR_ga_flag, 
-                                      use_temir_beta = use_TEMIR_beta_flag, 
+                                      use_temir_ra = (ga_scheme == 'CLM4.5'), 
+                                      use_temir_beta = (gs_water_stress_scheme == 'CLM4.5'), 
                                       rsmin = rst.min, brs = b.rs, 
                                       par.sun = phi_sun, par.sha = phi_sha, 
                                       Lsun = LAI_sun, Lsha = LAI_sha, 
@@ -1012,9 +1008,7 @@ f_simulate_ij = function(IJ) {
                }
                 
               # Maintenance respiration 
-                mr_fluxes = f_maintenance_respiration_fluxes(woody.flag = woody_flag, soil_depth_array = soil_layer_depth, T_soil_array = T_soil_array_input, T_2M = T_2m,
-                                                                                  leaf_N = leaf_C / leaf_cn_ratio, livestem_N = livestem_C / stem_cn_ratio, livecoarseroot_N = livecoarseroot_C / coarseroot_cn_ratio, fineroot_N = fineroot_C / fineroot_cn_ratio, grain_N = grain_C / grain_cn_ratio,
-                                                                                  root_fraction_array = root_frac_Tsoil_pft)
+                mr_fluxes = f_maintenance_respiration_fluxes(root_frac_array = root_frac_Tsoil_pft, T_soil_array = T_soil_array_input, T_2M = T_2m, leaf_N = leaf_C / leaf_cn_ratio, livestem_N = livestem_C / stem_cn_ratio, livecoarseroot_N = livecoarseroot_C / coarseroot_cn_ratio, fineroot_N = fineroot_C / fineroot_cn_ratio, grain_N = grain_C / grain_cn_ratio)
                 
                 An_timestep = canopy_photosyn$A_can
                 mr_timestep = mr_fluxes$mr_total
@@ -1473,6 +1467,7 @@ f_hist_reshape = function(ij, hist_ij, err_check_only=FALSE) {
 f_hourly_reshape = function(hist_grid, dim_day=3, dim_hr=5) {
    
    # This function reshapes the default hourly data output in the debugging mode by combining the two temporal dimensions (days and hours) into one single dimension of consecutive hours.
+   # For this function to work, "dim_day" has to be 3 and "dim_hr" has to be either 4 or 5.
    # For this function to work, "dim_day" has to be 3 and "dim_hr" has to be either 4 or 5.
    
    dim_hist = dim(hist_grid)

@@ -210,6 +210,8 @@ LAT_CLM = LATIXY[1,]
 nlevsoi = 10
 # Number of CLM soil layers within TEMIR top soil layer:
 nlevsoi_top = 3
+# Number of CLM soil layers within TEMIR root zone:
+nlevsoi_root = 8
 # # Indices of natural PFT:
 # natpft = ncvar_get(nc, 'natpft')
 # # Indices of crop PFT:
@@ -332,10 +334,10 @@ for (i in 1:nlevsoi) {
    }
 }
 
-# Root fraction calculated with the soil layer depth in the soil temperature input (for the calculation of maintenance respiration)
+# Root fraction calculated with the soil layer depth from the soil temperature input (for the calculation of maintenance respiration)
 if (biogeochem_flag) {
-  if (is.na(T_soil_depth_array)) {
-    # single layer soil temperature input, root fraction is not needed
+  if (is.na(T_soil_depth_array) || length(T_soil_depth_array) == 1) {
+    # Soil temperature input of one layer, root fraction is not needed
     root_frac_Tsoil = array(1, dim=length(pftname))
   } else {
     # multiple layer soil temperature input 
@@ -343,9 +345,9 @@ if (biogeochem_flag) {
     root_frac_Tsoil = matrix(0, nrow=length(pftname), ncol=length(T_soil_depth_array))
     for (i in 1:length(T_soil_depth_array)) {
       if (i < length(T_soil_depth_array)) {
-        root_frac_Tsoil[, i] = 0.5*(exp(-roota_par*z_hi_T_soil[i]) + exp(-rootb_par*z_hi_T_soil[i]) - exp(-roota_par*z_hi_T_soil[i+1]) - exp(-rootb_par*z_hi_T_soil[i+1]))
-      } else {
         root_frac_Tsoil[,i] = 0.5*(exp(-roota_par*z_hi_T_soil[i]) + exp(-rootb_par*z_hi_T_soil[i]) - exp(-roota_par*z_hi_T_soil[i+1]) - exp(-rootb_par*z_hi_T_soil[i+1]))
+      } else {
+        root_frac_Tsoil[,i] = 0.5*(exp(-roota_par*z_hi_T_soil[i]) + exp(-rootb_par*z_hi_T_soil[i]))
       }
     }
   }
@@ -375,6 +377,19 @@ for (i in 1:nlevsoi_top) {
   } else {
     # soil_frac_top[i] = soil_thickness[i]*frac_bound_soil_top/z1_TEMIR
     soil_frac_top[i] = soil_thickness_bound_top/z1_TEMIR
+  }
+}
+#soil_frac_top = matrix(rep(soil_frac_top, each = length(pftname)), nrow = length(pftname), byrow = FALSE)
+soil_frac_bottom = matrix(0, nrow=1, ncol=(nlevsoi_root - nlevsoi_top + 1))
+for (i in nlevsoi_top:nlevsoi_root) {
+  if (i == nlevsoi_top) {
+    # soil_frac_bottom[i - nlevsoi_top + 1] = soil_thickness[i]*(1 - frac_bound_soil_top)/(z2_TEMIR - z1_TEMIR)
+    soil_frac_bottom[i - nlevsoi_top + 1] = (soil_thickness[i] - soil_thickness_bound_top)/(z2_TEMIR - z1_TEMIR)
+  } else if (i == nlevsoi_root) {
+    # soil_frac_bottom[i - nlevsoi_top + 1] = soil_thickness[i]*frac_bound_soil_root/(z2_TEMIR - z1_TEMIR)
+    soil_frac_bottom[i - nlevsoi_top + 1] = soil_thickness_bound_root/(z2_TEMIR - z1_TEMIR)
+  }  else {
+    soil_frac_bottom[i - nlevsoi_top + 1] = soil_thickness[i]/(z2_TEMIR - z1_TEMIR)
   }
 }
 #soil_frac_bottom = matrix(rep(soil_frac_bottom, each = length(pftname)), nrow = length(pftname), byrow = FALSE)
@@ -570,12 +585,12 @@ if (!file.exists(filename)) {
    # PCT_PFT_regrid = sp.regrid(spdata=PCT_PFT, lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    # PFT_frac = PCT_PFT_regrid*array(FRLAND, dim=c(dim(FRLAND), dim(PCT_PFT_regrid)[3]))/100
    # rm(PCT_PFT_regrid)
-
+   
    print('Regridding theta_sat, theta_sat0, b_psi, psi_sat, soil albedo...', quote=FALSE)
-   # Saturated volumetric water content by PFT (0-1):
-   theta_sat_PFT = sp.regrid(spdata=zero.to.NaN(THETA_SAT_BULK), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
-   theta_sat_PFT = NaN.to.zero(theta_sat_PFT)
-   # Saturated volumetric water content of top soil (0-1):
+   # Saturated volumetric water content (0-1):
+   theta_sat_bulk = sp.regrid(spdata=zero.to.NaN(THETA_SAT_BULK), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
+   theta_sat_bulk = NaN.to.zero(theta_sat_bulk)
+   # Saturated volumetric water content of top soil (0-1): (variable unused LEGACY)
    # theta_sat0 = sp.regrid(spdata=zero.to.NaN(THETA_SAT_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    # theta_sat0 = NaN.to.zero(theta_sat0)
    # Clapp and Homberger parameter:
@@ -613,7 +628,7 @@ if (!file.exists(filename)) {
    soil_color = sp.regrid(spdata=SOIL_COLOR, lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat, method='mode')
    
    exist_regrid = TRUE
-
+   
    save(list=c('LAI_mon_PFT', 'SAI_mon_PFT', 'PFT_frac', 'theta_sat_bulk', 'b_psi_bulk', 'psi_sat_bulk', 'theta_sat_bulk_top', 'b_psi_bulk_top', 'psi_sat_bulk_top', 'theta_sat_bulk_bottom', 'b_psi_bulk_bottom', 'psi_sat_bulk_bottom', 'soil_color', 'soil_albedo', 'grid_area', 'lon', 'lat', 'pftname', 'pftnum', 'exist_regrid'), file=filename)
    
 } else {
@@ -626,20 +641,20 @@ if (!file.exists(filename)) {
 cat('\n')
 
 ################################################################################
-### Regrid planting and harvest date data from Sack et al. (2010): (Pang and Sadiq, Jun 2019)
+### Regridding planting and harvest date data from Sack et al. (2010): (Pang and Sadiq, Jun 2019)
 ################################################################################
 
-# Regrid the planting and harvesting date data if the simulation is BGC (with crop)
-# The resolution of the original data is 0.5 x 0.5
+# Regridding the planting and harvesting date data if simulations require a map of prescribed planting date
+# The resolution of the default planting date map from Sack et al. 2010 is 0.5 x 0.5
 
-if ((biogeochem_flag && get_planting_date_option == 'prescribed-map') || O3_POD) {
+if ((biogeochem_flag && crop_planting_date_method == 'prescribed-map') || O3_POD) {
     
-    if (dlon < 0.5 || dlat < 0.5){
+    if (dlon < 0.5 || dlat < 0.5) {
         # Is this necessary???? (Pang, Jun 2019)
         warning('The default planting and harvesting data has a resolution of 0.5x0.5. Simulation resoltuion is too high that there may be some problems in regridding.')
     }
     
-    if (dlon == 0.5 && dlat == 0.5){
+    if (dlon == 0.5 && dlat == 0.5) {
         # Simulation resolution is the same as the data, can be read in directly from .nc
         filename = 'Sack_crop_calendar.nc'
         nc = nc_open(paste0(planting_date_map_dir, filename))
@@ -705,11 +720,13 @@ if ((biogeochem_flag && get_planting_date_option == 'prescribed-map') || O3_POD)
 }
 
 ################################################################################
-### Regrid GDDmat derived from Sack et al. (2010) crop calendar 
+### Regridding GDDmat derived from Sack et al. (2010) crop calendar 
 ################################################################################
 
+# Regridding the growing degree day requirements for harvesting (GDDmat) if simulations require a map of prescribed GDDmat
+
 if (biogeochem_flag) {
-    if (get_GDDmat_method == 'Sack') {
+    if (GDDmat_method == 'prescribed-map') {
         if (dlon == 360/540 && dlat == 0.5) {
             # The simulation resolution is the same as the input
             filename = 'Sack_crop_calendar_GDDmat_0.667x0.5.nc'
@@ -894,7 +911,7 @@ if (LAI_data_flag) {
             
             timestamp()
             
-            # Save variables and parameters:
+            # Save variables and parameters (updated: Tai, Apr 2020):
             save(list=c('LAI_data_mon', 'veg_frac', 'LAI_scaling_array', 'LAI_data_mon_PFT', 'LAI_day_PFT', 'SAI_day_PFT', 'lon', 'lat', 'pftname', 'pftnum', 'day'), file=output_filename)
             
          }
@@ -1005,7 +1022,7 @@ if (O3_damage_flag & !O3_fixed_flag) {
    # Regrid to model resolution if input resolution is not consistent:
    if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
       # Regrid to model resolution:
-      print('Regridding hourly O3 concentrations for year ', as.character(O3_used_years[1]), '...', quote=FALSE)
+      print(paste0('Regridding hourly O3 concentrations for year ', as.character(O3_used_years[1]), '...', quote=FALSE))
       O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
    }
    
@@ -1027,21 +1044,21 @@ if (!is.null(drydep_scheme)) {
       nc = nc_open(filename)
       # Mapping from CLM landtype to Wesely dry deposition landtype
       WESELY_MAPPING = ncvar_get(nc, 'IDEPB')
-      # RCLO
+      # Lower canopy resistance for O3
       RCLO_table = ncvar_get(nc, 'IRCLO')
-      # RCLS
+      # Lower canopy resistance for SO2
       RCLS_table = ncvar_get(nc, 'IRCLS')
-      # RGSO
+      # Ground resistance for O3
       RGO_table = ncvar_get(nc, 'IRGSO')
-      # RGS
+      # Ground surface resistance
       RGS_table = ncvar_get(nc, 'IRGSS')
-      # RI
+      # Internal resistance
       RI_table = ncvar_get(nc, 'IRI')
-      # RLU
+      # Cuticular resistance
       RLU_table = ncvar_get(nc, 'IRLU')
-      # RAC
+      # In-canopy aerodynamic resistance
       RAC_table = ncvar_get(nc, 'IRAC')
-      # DRYCOEFF
+      # Polynomial coefficients for dry deposition
       DRYCOEFF_table = ncvar_get(nc, 'DRYCOEFF')
       
       nc_close(nc)
@@ -1068,35 +1085,35 @@ if (!is.null(drydep_scheme)) {
       nc = nc_open(filename)
       # Mapping from CLM landtype to Wesely dry deposition landtype
       mapping_TEMIR = ncvar_get(nc, 'mapping_TEMIR')
-      # b_r for g(PAR)
+      # Empirical light response coefficient for stomatal resistance
       b_rs = ncvar_get(nc, 'b_rs')
-      # b_vpd for g(VPD)
+      # VPD empirical constant (kPa^-1) for g(VPD)
       b_vpd = ncvar_get(nc, 'bvpd')
-      # psi_max for g(psi)
+      # Maximum leaf water potenetial
       psi_max = ncvar_get(nc, 'psi_c1')
-      # psi_max for g(psi)
+      # Minimum leaf water potenetial
       psi_min = ncvar_get(nc, 'psi_c2')
-      # r_cut_dO
+      # Reference values for dry cuticle resistance
       r_cut_dO = ncvar_get(nc, 'Rcutd0_O3')
-      # r_cut_WO
+      # Reference values for wet cuticle resistance
       r_cut_wO = ncvar_get(nc, 'Rcutw0_O3')
-      # rg_o
+      # Ground resistance for O3
       rg_o = ncvar_get(nc, 'Rg_O3')
-      # rg_s for g(PAR)  ### NOTE: based on temperature for some LUC
+      # Ground resistance for SO2
       rg_s = ncvar_get(nc, 'Rgd_SO2')
-      # rst_min
+      # Minimum leaf stomatal resistance
       rst_min = ncvar_get(nc, 'rstmin')
-      # maximum snow depth that the whole canopy is coverred by snow
+      # Maximum snow depth
       sdmax = ncvar_get(nc, 'Sdmax')
-      # maximum temperature for g(T)
+      # Maximum temperature for stomatal opening
       t_max_st = ncvar_get(nc, 'Tmax')
-      # minimum temperature for g(T)
+      # Minimum leaf stomatal resistance
       t_min_st = ncvar_get(nc, 'Tmin')
-      # optimum temperature for g(T)
+      # Maximum snow depth
       t_opt_st = ncvar_get(nc, 'Topt')
-      # in-canopy maximum aerodynamic resistance
+      # In-canopy maximum aerodynamic resistance
       Rac0_min = ncvar_get(nc, 'Rac0_min')
-      # in-canopy minimum aerodynamic resistance
+      # In-canopy minimum aerodynamic resistance
       Rac0_max = ncvar_get(nc, 'Rac0_max')
       
       nc_close(nc)
@@ -1118,7 +1135,7 @@ for (i in 1:length(lon)) {
 disp_on_z0m[which(is.na(disp_on_z0m))] = 0
 
 ################################################################################
-### Initial conditions of the ecosystem for crop simulations
+### Initial conditions of ecosystem variables in crop simulations
 ################################################################################
 
 if (biogeochem_flag) {

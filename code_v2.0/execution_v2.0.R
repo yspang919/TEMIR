@@ -22,9 +22,9 @@ library(ncdf4) # For reading ncdf4 files
 library(filesstrings) # For file and directory manipulations
 # Load libraries for post-simulation processing:
 library(grid) # For graphics
-library(spam) # For matrix manipulations
+suppressMessages(library(spam)) # For matrix manipulations
 library(maps) # For map display
-library(fields) # For spatial data
+suppressMessages(library(fields)) # For spatial data
 timestamp()
 
 ################################################################################
@@ -33,7 +33,7 @@ timestamp()
 
 # Source input scripts:
 # *** Please make sure the input scripts (e.g., input_TEMIR.R and input_crop_extension.R) are in the same simulation directory as this execution script. ***
-source('input_TEMIR_basic_settings.R')
+source('input_TEMIR.R')
 
 if (file.exists('input_crop_extension.R')) {
     # Simulation with the crop module
@@ -65,7 +65,7 @@ if (infer_canopy_met_flag) ga_scheme = 'CLM4.5'
 ### Source scripts
 ################################################################################
 
-# Globally available geophysical constants: 
+# Globally available geophysical constants:
 source(paste0(code_dir, 'geophys_const.R'))
 
 # Useful functions:
@@ -88,22 +88,18 @@ source(paste0(code_dir, 'simulate_ij.R'))
 source(paste0(code_dir, 'drydep_toolbox.R'))
 
 # Functions to incorporate FLUXNET datasets:
-if (!is.na(FLUXNET_dir)) source(paste0(code_dir, 'FLUXNET_functions.R'))
-
-# Functions to incorporate meteorological data:
-# Obsolete, but may revive for future purposes (Tai, Jan 2019)
-# source(paste0(code_dir, 'met_tools.R'))
+if (FLUXNET_site_flag) source(paste0(code_dir, 'FLUXNET_functions.R'))
 
 # Surface and PFT input parameters (prescribed):
 source(paste0(code_dir, 'PFT_surf_data.R'))
 
 # Functions used in the crop module (after version 2.0)
 if(biogeochem_flag){
-   source(paste0(BGC_code_dir, 'biomass_partitioning.R'))
-   source(paste0(BGC_code_dir, 'plant_phenology.R'))
-   source(paste0(BGC_code_dir, 'plant_physiology.R'))
-   source(paste0(BGC_code_dir, 'maintenance_respiration.R'))
-   source(paste0(BGC_code_dir, 'Cpool_budget.R'))
+   source(paste0(code_dir, '/extension_crop/biomass_partitioning.R'))
+   source(paste0(code_dir, '/extension_crop/plant_phenology.R'))
+   source(paste0(code_dir, '/extension_crop/plant_physiology.R'))
+   source(paste0(code_dir, '/extension_crop/maintenance_respiration.R'))
+   source(paste0(code_dir, '/extension_crop/Cpool_budget.R'))
 }
 
 ################################################################################
@@ -249,7 +245,7 @@ var_name = available_outputs_df[na.omit(match(unique(output_variables), availabl
 var_list = list()
 var_name[] = lapply(var_name, as.character) # for R version 3.1.1 
 for (v in 1:nrow(var_name)) {
-   var_dim_list = if (var_name[v,'res_level'] == 'PFT') {list(X, Y, P, H)} else if (var_name[v,'res_level'] == 'grid') {list(X, Y, H)} else if (var_name[v,'res_level'] == 'PFT_daily') {list(X, Y, P)}
+   var_dim_list = if (var_name[v,'res_level'] == 'PFT') list(X, Y, P, H) else if (var_name[v,'res_level'] == 'grid') list(X, Y, H) else if (var_name[v,'res_level'] == 'PFT_daily') list(X, Y, P)
    var_list[[v]] = ncvar_def(name=var_name[v,'variable_name'], units=var_name[v,'unit'], dim=var_dim_list, longname=var_name[v,'long_name'], prec='float', compression=4)
 }
 rm(var_dim_list)
@@ -272,7 +268,6 @@ if (cluster_flag) {
    if (is.na(n_node)) n_node = 1
    if (n_node > 1) stop('TEMIR cannot be run on multiple nodes!')
 }
-
 # For single-site simulation, always use one core only:
 if (single_site_flag) n_core = 1
 # Print number of cores used:
@@ -303,7 +298,7 @@ input_data_df = `colnames<-`(rbind.data.frame(
    # Root zone soil wetness (0-1)
    c('GWETROOT', '0-1', 'GWETROOT', FALSE, 'GWETROOT', FALSE, NA, FALSE),
    # Top soil wetness (0-1)
-   c('GWETTOP','0-1', 'GWETTOP', FALSE, 'GWETTOP', FALSE, NA, FALSE),
+   c('GWETTOP','0-1', 'GWETTOP', FALSE, 'GWETTOP', FALSE, 'SWC_F_MDS_1', FALSE),
    # Sea-level pressure (Pa)
    c('SLP', 'Pa', 'SLP', FALSE, 'SLP', TRUE, NA, FALSE),
    # Atmospheric pressure (Pa)
@@ -371,10 +366,10 @@ if (FLUXNET_flag) {
    
    # Subset half-hourly data into hourly data if required
    if (dt_hr == 1 && substr(basename(FLUXNET_file), 32, 33) == 'HH') {
-      print('NOTE : Half-hourly data is subsetted into hourly data BUT precipitation is coverted accordingly')
+      print('NOTE : Half-hourly data is subsetted into hourly data BUT precipitation is coverted and not subsetted!')
       HH_to_HR_flag = TRUE
    } else HH_to_HR_flag = FALSE
-   
+  
 } else updated_input_df = input_data_df
 
 ################################################################################
@@ -419,6 +414,7 @@ for (d in 1:n_day_sim) {
          if (length(year_vec) > 1) {
             YYYY_LAI = as.character(LAI_used_years[which(year_vec == as.numeric(YYYY))])
             last_YYYY_LAI = as.character(LAI_used_years[which(year_vec == as.numeric(YYYY)) - 1])
+            if (length(last_YYYY_LAI) == 0) last_YYYY_LAI = 'no_YYYY_LAI'
             if (YYYY_LAI != last_YYYY_LAI) {
                subfn = paste0('daily_monthly_LAI_data_', YYYY_LAI, '.RData')
                filename = paste0(processed_surf_data_dir, subfn)
@@ -433,6 +429,7 @@ for (d in 1:n_day_sim) {
          if (length(year_vec) > 1) {
             YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY))])
             last_YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY)) - 1])
+            if (length(last_YYYY_O3) == 0) last_YYYY_O3 = 'no_YYYY_O3'
             if (YYYY_O3 != last_YYYY_O3) {
                filename = paste0(O3_data_dir, O3_subn1, YYYY_O3, O3_subn2)
                print(paste0('Loading surface O3 concentrations from ', filename, '...'), quote=FALSE)
@@ -445,7 +442,7 @@ for (d in 1:n_day_sim) {
                # Regrid to model resolution if input resolution is not consistent:
                if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
                   # Regrid to model resolution:
-                  print('Regridding hourly O3 concentrations for year ', YYYY_O3, '...', quote=FALSE)
+                  print(paste0('Regridding hourly O3 concentrations for year ', YYYY_O3, '...'), quote=FALSE)
                   O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
                }
             }
@@ -501,7 +498,7 @@ for (d in 1:n_day_sim) {
       start_ind = match(FLUXNET_current,FLUXNET_selected_data$TIMESTAMP_START)
       end_ind = match(FLUXNET_end,FLUXNET_selected_data$TIMESTAMP_START) - 1
       # Check if FLUXNET data extraction is successful
-      if (start_ind < 0 || is.na(end_ind)) stop(paste('Error in FLUXNET Data input range!!!', start_ind, end_ind))
+      if (start_ind < 0 || is.na(end_ind)) stop(paste('Error in FLUXNET data input range!!!', start_ind, end_ind))
       
       # Select current FLUXNET data:
       FLUXNET_day_data = FLUXNET_selected_data[start_ind:end_ind,]
@@ -570,15 +567,15 @@ for (d in 1:n_day_sim) {
          nc_close(nc)
          
        } else if (T_soil_source == 'custom') {
-         # Implement your code to read daily soil temperature input (in K)
+         # Implement your code to read daily soil temperature input date (in K)
          # The dimension of the input should be [lon, lat, hour] for global/regional simulations, [1,1,hour] for single-site simulations
          
        }
    }
    
-   # GDD map for determining GDDmat
+   # Maps of the harvest growing degree days requirement
    if (biogeochem_flag) {
-       if (get_GDDmat_method == "CLM4.5") {
+       if (GDDmat_method == "CLM4.5") {
            # For simplicity, we decide not to implement the moving average of GDDx like the one in CLM4.5, as the prediction of the change in planting/harvesting date are not very accurate anyway
            # We only use the GDDx map in yr 2000 and calculate the corresponding GDDmat
            filename = paste0(GDDx_map_dir,'MEERA2_year_2000_growing_season_GDDx_map.nc')
@@ -587,24 +584,24 @@ for (d in 1:n_day_sim) {
            GDD8_map = ncvar_get(nc,"GDD8")
            GDD10_map = ncvar_get(nc,"GDD10")
            nc_close(nc)
-       } else if (get_GDDmat_method == "Sack") {
-           # The data is read in at PFT_surf_data.R
-       } else if (get_GDDmat_method == "custom") {
-           print("'get_GDDmat_method' is custom, will not read in GDDx map")
+       } else if (GDDmat_method == 'prescribed-map') {
+           # The map is read at PFT_surf_data.R
+       } else if (GDDmat_method == 'prescribed-site') {
+           # The site GDDmat is an input in 'input_TEMIR_crop_extension.R'
        }
    }
    
-   #### soyFACE project
-   if (biogeochem_flag) {
-       if (force_prescribed_LAI) {
-           daily_LAI = mean(force_prescribed_LAI_input[((d-1)*24+1):((d-1)*24+24)], na.rm = T)
-           if (d != 1) {
-               LAI_dayMinus1 = mean(force_prescribed_LAI_input[((d-2)*24+1):((d-2)*24+24)], na.rm = T)
-           } else {
-               LAI_dayMinus1 = 0
-           }
-       }
-   }
+   # #### soyFACE project
+   # if (biogeochem_flag) {
+   #    if (force_prescribed_LAI) {
+   #        daily_LAI = mean(force_prescribed_LAI_input[((d-1)*24+1):((d-1)*24+24)], na.rm = T)
+   #        if (d != 1) {
+   #            LAI_dayMinus1 = mean(force_prescribed_LAI_input[((d-2)*24+1):((d-2)*24+24)], na.rm = T)
+   #        } else {
+   #            LAI_dayMinus1 = 0
+   #        }
+   #    }
+   # }
    
    #############################################################################
 
@@ -656,8 +653,6 @@ for (d in 1:n_day_sim) {
          # Get history nc file name:
          filename = paste0(simulation_dir, 'hist_data/hist_grid_', YYYY, MM, DD, '.nc')
          
-         print(paste0('nc filename = ', filename))
-         
          # Delete previous history nc file:
          if (file.exists(filename)) file.remove(filename)
          
@@ -679,7 +674,7 @@ for (d in 1:n_day_sim) {
          ncatt_put(nc, varid=0, attname='Title', attval=paste0(basename(simulation_dir), ' ', YYYY, MM, DD))
          ncatt_put(nc, varid=0, attname='Conventions', attval='COARDS')
          ncatt_put(nc, varid=0, attname='History', attval=paste0('Generated on ', Sys.time()))
-
+         
          # FLUXNET data warnings:
          if (FALSE && single_site_flag && FLUXNET_flag) {
             ncatt_put(nc, varid=0, attname='FLUXNET Site Warnings', attval=FLUXNET_global_err)
