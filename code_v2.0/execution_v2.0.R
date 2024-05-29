@@ -11,33 +11,50 @@
 # Updates in version 2.0
 # New output mode 'PFT_daily' for daily variables in the crop module
 
+# personal R library
+.libPaths('/users/b146986/R_lib/R4.1')
+
+packages = c('tools','methods','dotCall64','stringr','abind','parallel','ncdf4','filesstrings',
+             'grid','spam','maps','fields',
+             'lubridate')
+installed_packages = packages %in% rownames(installed.packages())
+
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages], repos = 'http://cran.us.r-project.org')
+}
+invisible(lapply(packages, library, character.only=TRUE))
+
 # Load necessary libraries upfront:
-library(tools) # For utilities
-library(methods) # For basic R utility
-library(dotCall64) # For interfacing other languages
-library(stringr) # For string manipulations
-library(abind) # For array manipulations
-library(parallel) # For parallel computing
-library(ncdf4) # For reading ncdf4 files
-library(filesstrings) # For file and directory manipulations
+# library(tools) # For utilities
+# library(methods) # For basic R utility
+# library(dotCall64) # For interfacing other languages
+# library(stringr) # For string manipulations
+# library(abind) # For array manipulations
+# library(parallel) # For parallel computing
+# library(ncdf4) # For reading ncdf4 files
+# library(filesstrings) # For file and directory manipulations
 # Load libraries for post-simulation processing:
-library(grid) # For graphics
-suppressMessages(library(spam)) # For matrix manipulations
-library(maps) # For map display
-suppressMessages(library(fields)) # For spatial data
+# library(grid) # For graphics
+# suppressMessages(library(spam)) # For matrix manipulations
+# library(maps) # For map display
+# suppressMessages(library(fields)) # For spatial data
 timestamp()
 
 ################################################################################
 ### Source input scripts for model configuration:
 ################################################################################
 
+# Set simulation directory:
+simulation_dir = paste0(getwd(), '/')
+
 # Source input scripts:
 # *** Please make sure the input scripts (e.g., input_TEMIR.R and input_crop_extension.R) are in the same simulation directory as this execution script. ***
 source('input_TEMIR.R')
 
-if (file.exists('input_crop_extension.R')) {
+if (file.exists('input_TEMIR_crop_extension.R')) {
     # Simulation with the crop module
-    source('input_crop_extension.R')
+    source('input_TEMIR_crop_extension.R')
+    biogeochem_flag = TRUE
 } else {
     # Simulation without the crop module, biogeochem_flag is FALSE by settings
     biogeochem_flag = FALSE
@@ -95,11 +112,11 @@ source(paste0(code_dir, 'PFT_surf_data.R'))
 
 # Functions used in the crop module (after version 2.0)
 if(biogeochem_flag){
-   source(paste0(code_dir, '/extension_crop/biomass_partitioning.R'))
-   source(paste0(code_dir, '/extension_crop/plant_phenology.R'))
-   source(paste0(code_dir, '/extension_crop/plant_physiology.R'))
-   source(paste0(code_dir, '/extension_crop/maintenance_respiration.R'))
-   source(paste0(code_dir, '/extension_crop/Cpool_budget.R'))
+   source(paste0(TEMIR_dir, '/extension_crop/biomass_partitioning.R'))
+   source(paste0(TEMIR_dir, '/extension_crop/plant_phenology.R'))
+   source(paste0(TEMIR_dir, '/extension_crop/plant_physiology.R'))
+   source(paste0(TEMIR_dir, '/extension_crop/maintenance_respiration.R'))
+   source(paste0(TEMIR_dir, '/extension_crop/Cpool_budget.R'))
 }
 
 ################################################################################
@@ -107,9 +124,6 @@ if(biogeochem_flag){
 ################################################################################
 
 cat('\n')
-
-# Biogeochemistry setting:
-if (!exists('biogeochem_flag')) biogeochem_flag = FALSE
 
 # FLUXNET site setting:
 if (FLUXNET_site_flag) {

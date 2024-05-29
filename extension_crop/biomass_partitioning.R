@@ -35,7 +35,7 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
     # Ensure allocation fluxes (or NPP) are positive
     NPP_gCm2s1 = max(0, NPP_gCm2s1)
     
-    # print(paste0('[biomass partitioning] (unit: gCm-2d-1) NPP = ', signif(NPP_gCm2s1 * 86400,4), ' MR_tol = ', signif(mr_total* 86400,4)))
+    print(paste0('[Biomass partitioning] (unit: gCm-2d-1) NPP = ', signif(NPP_gCm2s1 * 86400,4), ' MR_tol = ', signif(mr_total* 86400,4)))
     # print(paste0('[biomass partitioning] NPP:GPP ratio = ', signif(NPP_gCm2s1/A_can_gCm2s1, digits = 3)))
     
       if (crop_C_partit_scheme == 'custom') {
@@ -112,7 +112,7 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
           aleaf_leafem = CLM45_crop_alloc$a_leaf_leafemergence
         }
       
-    print(paste0('[biomass partitioning] aleaf = ', signif(aleaf,3),' aroot = ', signif(aroot,3),' astem = ', signif(astem,3), ' agrain = ', signif(agrain,3)))
+    # print(paste0('[biomass partitioning] aleaf = ', signif(aleaf,3),' aroot = ', signif(aroot,3),' astem = ', signif(astem,3), ' agrain = ', signif(agrain,3)))
     # Allocation fluxes to different plant parts
     leaf_carbon_partitioning_flux = NPP_gCm2s1 * aleaf
     fineroot_carbon_partitioning_flux = NPP_gCm2s1 * aroot

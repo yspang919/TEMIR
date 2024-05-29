@@ -25,7 +25,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
   GDD_Tsoil = GDD_update$GDD_T_soil
   
   # Initializing variables for a potential growing season
-  if (get_planting_date_option == 'CLM4.5') {
+  if (crop_planting_date_method == 'CLM4.5') {
       # For calculated planting date in CLM4.5, initialize the growing season at 1st Jan and 1st June in the Northern- and Southern-hemisphere, respectively.
       # How about at the tropics in CLM 5? (Pang, May 2024)
       crop_calendar_start_jday = if (at_NH_flag) 1 else if (!leap) 183 else 184
@@ -36,7 +36,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
               LAI = 0; SAI = 0; leafC = 0; livestemC; grainC = 0; finerootC = 0; CUO_grain_filling = NA
           }
       }
-  } else if (any(get_planting_date_option == c('prescribed-map', 'prescribed-site'))) {
+  } else if (any(crop_planting_date_method == c('prescribed-map', 'prescribed-site'))) {
       # For prescribed planting date, initialize the growing season 1 day before planting
       if (current_jday == prescribed_planting_date_readin - 1) {
           if (!crop_living_flag) {
@@ -50,13 +50,13 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
   
   # Planting the crops at the planting date
   if (!crop_living_flag && !crop_planting_flag) {
-    if (any(get_planting_date_option == c('prescribed-map','prescribed-site'))) {
+    if (any(crop_planting_date_method == c('prescribed-map','prescribed-site'))) {
       if (current_jday == if(is.na(prescribed_planting_date)) prescribed_planting_date_readin else prescribed_planting_date) {
         crop_planting_flag = T; crop_living_flag = T; planting_jday = current_jday 
         seed_C_to_leaf_C = emergence_carbon_to_leaf
         # print(paste0("[crop_phenology] Crop is planted on ", current_date))
       }
-    } else if (get_planting_date_option == 'CLM4.5') { 
+    } else if (crop_planting_date_method == 'CLM4.5') { 
       # Using climate and weather conditions to calculate planting date
       # 4 conditions:
       # 1. 10-days running mean daily mean T_2m > T_plant_req  (weather constraint)
@@ -83,25 +83,25 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
     # Determining the growing degree day (GDD) requirements, once the crop is planted 
     if (crop_living_flag) {
       
-        if (get_GDDmat_method == "custom") {
+        if (GDDmat_method == 'prescribed-site') {
             # 'prescribed_GDD_mat' is an input at 'input_TEMIR_crop_extension.R'
             GDDmat = prescribed_GDD_mat
-        } else if (get_GDDmat_method == "Sack") {
+        } else if (GDDmat_method == 'prescribed-map') {
             if (is_maize)  GDDmat = GDDmat_M
             if (is_springwheat) GDDmat = GDDmat_SW
             if (is_winterwheat) GDDmat = GDDmat_WW
             if (is_soybean) GDDmat = GDDmat_S
-        } else if (get_GDDmat_method == "CLM4.5"){
-            if (is_maize){GDDmat = max(950, min(GDD8_20yr * 0.85, hybgdd))}
-            if (is_springwheat){GDDmat = min(GDD0_20yr, hybgdd)}
-            if (is_soybean){GDDmat = min(GDD10_20yr, hybgdd)}
+        } else if (GDDmat_method == 'CLM4.5') {
+            if (is_maize) GDDmat = max(950, min(GDD8_20yr * 0.85, hybgdd))
+            if (is_springwheat) GDDmat = min(GDD0_20yr, hybgdd)
+            if (is_soybean) GDDmat = min(GDD10_20yr, hybgdd)
             # There is no winter wheat model in CLM4.5
         }
         
-        if (get_GDDrepr_method == "custom") {
+        if (GDDrepr_method == 'prescribed-site') {
             # It is an input at 'input_TEMIR_crop_extension.R'
             GDDrepr = prescribed_GDD_repr
-        } else if (get_GDDrepr_method == "CLM4.5") {
+        } else if (GDDrepr_method == "CLM4.5") {
             if (is_maize) {
                 maize_maturity_rating = max(73, min(135, (GDDmat + 53.683)/13.882))          # details of this formula can be found in Kucharik (2003), Earth Interactions No.7
                 GDD_repr_factor = -0.002 * (maize_maturity_rating - 73) + 0.65
@@ -112,9 +112,9 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
             }
         }
         
-        if (get_GDDemer_method == "custom") {
+        if (GDDemer_method == 'prescribed-site') {
             GDDemer = prescribed_GDD_emer
-        } else if (get_GDDemer_method == "CLM4.5") {
+        } else if (GDDemer_method == "CLM4.5") {
             GDDemer = emer_GDDfrac * GDDmat
         }
     
@@ -144,7 +144,6 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
       DVI = 1 + (GDD_T2m - GDDrepr) / (GDDmat - GDDrepr)
     }
     
-    print(paste0("[crop_phenology] jday = ", current_jday,"___day since planting = ",days_since_planting, "__GDDT2m = ", signif(GDD_T2m, digits = 4), "__GDDTsoil = ", signif(GDD_Tsoil, digits = 4)))
     # print(paste0("[crop_phenology] GDDemer = ", signif(GDDemer, 5),"___GDDrepr = ",signif(GDDrepr, 5), "__ GDDmat = ", signif(GDDmat, digits = 4)))
 
     # Harvesting conditions
@@ -192,6 +191,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
         seed_C_to_leaf_C_flux = emergence_carbon_to_leaf / 86400
         leaf_C_loss_flux = 0; grain_C_loss_flux = 0; livestem_C_loss_flux = 0; fineroot_C_loss_flux = 0
       } else {
+	# No other C fluxes except for the allocation of asslimated carbon
         seed_C_to_leaf_C_flux = 0; leaf_C_loss_flux = 0; grain_C_loss_flux = 0; livestem_C_loss_flux = 0; fineroot_C_loss_flux = 0
       }
     } else {
@@ -201,9 +201,8 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
     } 
     
     # Foliage loss during the reproductive stage
-    # In CLM4.5, reaching reproductive stage associates with foliage loss, but this is not the case in JULES (also in the field).
+    # In CLM4.5, reaching reproductive stage associates with foliage loss, but this is not the case in JULES (also from field observations).
     # In JULES, foliage loss starts at the midway between reaching reproductive stage and maturity GDD-wise (i.e., DVI >= 1.5).
-    # It is now separated from the determination of reaching reproductive stage
     if (crop_leaf_sen_scheme == 'CLM4.5' && GDD_T2m >= GDDrepr && GDD_T2m < GDDmat) {
       # leaf senescence rate for every time step during the reproductive stage (unit: gC m^-2 s^-1) 
       # leaf_longevity (yr) is a PFT-specific variables read in PFT_surf_data.R
@@ -213,7 +212,13 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
       seed_C_to_leaf_C_flux = 0; grain_C_loss_flux = 0; fineroot_C_loss_flux = 0
     } else if (crop_leaf_sen_scheme == 'custom' && !is.na(DVI) && DVI >= leaf_senescence_DVI) {
       # 'leaf_senescence_DVI' is an input from input_TEMIR_crop_extension.R
+      
       # Implemented your scheme here...
+      # leaf_C_loss_flux = ...
+      # livestem_C_loss_flux = ...
+      leaf_C_loss_flux = 1/(leaf_longevity * 86400 * 365) * leafC
+      livestem_C_loss_flux = 0
+      
       # Declare other loss fluxes
       seed_C_to_leaf_C_flux = 0; grain_C_loss_flux = 0; fineroot_C_loss_flux = 0
       
@@ -244,12 +249,14 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
     
   } else {
       # Crops not planted
-      # Variables to return
+      days_since_planting = NA
       seed_C_to_leaf_C_flux = 0; leaf_C_loss_flux = 0; grain_C_loss_flux = 0; livestem_C_loss_flux = 0; fineroot_C_loss_flux = 0
       DVI = NA
   }
   
-  # print(paste0("GDDT2m = ", signif(GDD_T2m,4), " (req = ", signif(GDDmat,4),' and ', signif(GDDrepr,4), ")", " GDDTsoil = ", signif(GDD_Tsoil,3), " (req = ", signif(GDDemer, 3),")"))
+  cat(paste("Day of year = ", current_jday, "\nDay since planting = ", days_since_planting, 
+               "\nGDDT2m = ", signif(GDD_T2m,4), " (req = ", signif(GDDmat,4),' and ', signif(GDDrepr,4), ")", 
+               "\nGDDTsoil = ", signif(GDD_Tsoil,3), " (req = ", signif(GDDemer, 3),")", sep = ""))
   
   # List of outputs
   # Fluxes: seedC_to_leafC, leafC_loss, grainC_loss, livestemC_loss, finerootC_loss

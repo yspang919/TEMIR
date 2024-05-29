@@ -4,7 +4,7 @@
 
 # TODO
 # Check the mortality rate for natural PFTs in CLM4.5
-
+# Check if generic C3 crops have natural mortality rate
 ################################################################################
 ### Functions:
 ################################################################################
@@ -36,7 +36,7 @@ f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_de
  # print(paste0('[Cpool addition before] (unit: gC m-2) leaf_C = ', signif(leaf_C, digits = 3), ' livestem_C = ', signif(livestem_C, digits = 3), ' fineroot_C = ', signif(fineroot_C, digits = 3) , ' grain_C = ', signif(grain_C, digits = 3)))
  
  # Updating carbon pools during the emergence of crops (excluding generic crops)
- if (is_crop && !is_stress_decid) {
+ if (is_crop) {
     if (!is.na(seedC_to_leafC_flux_gCm2s1)) {leaf_C = leaf_C + seedC_to_leafC_flux_gCm2s1 * second_per_day}
  }
  
@@ -64,7 +64,7 @@ f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_de
  grain_C = grain_C - grain_C_loss_flux_gCm2s1 * second_per_day
   
  # Updating carbon pools at the reproductive stage (retranslocation, for crops only)
- if (is_crop && !is_stress_decid) {
+ if (is_crop) {
     if (crop_transloc_scheme == 'JULES') {
        # Translocation in JULES: 100 % of the leaf carbon loss is going to grain after halfway of the reproductive stage GDDT2m-wise (i.e., DVI >= 1.5)
        # Adding a translocation efficiency term here, (probably?) not all C loss are retranslocated

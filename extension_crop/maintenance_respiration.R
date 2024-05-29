@@ -52,7 +52,7 @@ f_maintenance_respiration_fluxes_CLM45 = function(root_frac_array, T_soil_array,
     }
     
     output = list(mr_leaf = mr_leaf, mr_livestem = mr_livestem, mr_grain = mr_grain, mr_coarseroot = mr_coarseroot, mr_fineroot = mr_fineroot_total,
-                  mr_total = (mr_leaf + mr_livestem + mr_grain + mr_coarseroot + mr_fineroot))
+                  mr_total = (mr_leaf + mr_livestem + mr_grain + mr_coarseroot + mr_fineroot_total))
     
     return(output)
 }

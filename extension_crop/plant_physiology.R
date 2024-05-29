@@ -2,15 +2,11 @@
 ### Module for calculating the physical structure of vegetation
 ################################################################################
 
-# TODO
-# Check if there is a PFT category represents PFT#10 - #12
-# Is it possible not to use ipft to select a PFT? Code is less readable.
-
 ################################################################################
 ### Functions:
 ################################################################################
 
-f_vegetation_structure = function(is_crop, is_evergreen, is_stress_decid, is_season_decid, is_woody, ipft,
+f_vegetation_structure = function(is_crop, is_managed_crop, is_maize, is_shrub, is_evergreen, is_stress_decid, is_season_decid, is_woody,
                                   slatop, dsladlai, laimx, ztopmx,
                                   leafC, deadstemC, tlai = LAI, tsai = SAI, 
                                   peak_lai_flag, harvesting_flag, crop_living_flag,
@@ -39,7 +35,7 @@ f_vegetation_structure = function(is_crop, is_evergreen, is_stress_decid, is_sea
       } else {
         # Crop, grass PFTs
         LAI_new = slatop * leafC
-        if (is_crop && !is_stress_decid) {
+        if (is_managed_crop) {
           # The LAI cap in the CLM4.5 crop model
           peak_lai_flag = if (limit_crop_LAI_flag && LAI_new > laimx) TRUE else FALSE
         }
@@ -74,27 +70,24 @@ f_vegetation_structure = function(is_crop, is_evergreen, is_stress_decid, is_sea
     
     # SAI calculation
     if (SAI_scheme == 'CLM4.5') {
-      if (ipft == 16 || ipft == 17) { # C3 unmanaged crops
-        tsai_alpha = 1-1*dt/dtsmonth
-        tsai_min = 0.1*0.5  # 0.5 is the scale to match MODIS derived value according to CLM
-        SAI_new = max(tsai_alpha*SAI_old+max(tlai_old-tlai,0), tsai_min)
-      } else if (!(ipft >= 18 && ipft <= 25)) { 
-        # other PFTs except simulated crops
-        tsai_alpha = 1-0.5*dt/dtsmonth
-        tsai_min = 1*0.5
-        SAI_new = max(tsai_alpha*SAI_old+max(LAI_old-LAI_new, 0), tsai_min)
-      } else {
-        # Simulated crops
-        if (harvesting_flag && LAI_new < 1e-4) { # after harvesting, SAI = 0.25
-          # After harvesting, SAI = 0.25
-          SAI_new = 0.25
-        } else if (ipft == 18 || ipft == 19) { 
-          # Maize
-          SAI_new = 0.1*LAI_new
-        } else {
-          # Other crops: soybean, spring and winter cereals
-          SAI_new = 0.2*LAI_new
-        }
+       if (is_crop && !is_managed_crop) { # C3 generic crops
+          tsai_alpha = 1-1*dt/dtsmonth
+          tsai_min = 0.1*0.5  # 0.5 is the scale to match MODIS derived value according to CLM
+          SAI_new = max(tsai_alpha*SAI_old+max(tlai_old-tlai,0), tsai_min)
+       } else if (!is_managed_crop) { # other PFTs except simulated crops
+          tsai_alpha = 1-0.5*dt/dtsmonth
+          tsai_min = 1*0.5
+          SAI_new = max(tsai_alpha*SAI_old+max(LAI_old-LAI_new, 0), tsai_min)
+       } else if (is_managed_crop) { # simulated crops
+          if (harvesting_flag && LAI_new < 1e-4) { # after harvesting, SAI = 0.25
+             # After harvesting, SAI = 0.25
+             SAI_new = 0.25
+          } else if (is_maize) { 
+             SAI_new = 0.1*LAI_new
+          } else {
+             # Other crops: soybean and wheat
+             SAI_new = 0.2*LAI_new
+          }
       }
     } else if (SAI_scheme == 'custom') {
       # Implement your scheme here...
@@ -104,36 +97,33 @@ f_vegetation_structure = function(is_crop, is_evergreen, is_stress_decid, is_sea
     
     # Canopy height and bottom calculations
     if (canopy_h_scheme == 'CLM4.5') {
-      if (!(is_crop && !is_season_decid)) {
-        # All vegetation except simulated crops
-        if (is_woody) {
-          # PFT #10-12: shurbs, others: trees
-          taper =  if (ipft >= 10 && ipft <= 12) 10 else 200
-          h_top = ((3 * deadstemC * taper^2) / (pi * stocking * dwood))^(1/3)
-          h_top = max(h_top,0.01)
-          h_bottom = max(0,min(3,htop-1))
-        } else { 
-          # Grasses and unmanaged crops
-          h_top = max(0.25, tlai * 0.25)
-          h_top = max(htop,0.01)
-          h_bottom = max(0,min(0.05,h_top-0.2))
-        }
-      } else { 
-        # Simulated crops
-        if (crop_living_flag){
-          h_top = ztopmx * min(tlai/laimx-1,1)^2
-          h_top = max(0.05, h_top)
-          h_bottom = 0.02  
-        } else {
-          h_top = 0
-          h_bottom = 0
-        }
-        
-      }
+       if (!is_managed_crop) {
+          if (is_woody) {
+             taper =  if (is_shrub) 10 else 200
+             h_top = ((3 * deadstemC * taper^2) / (pi * stocking * dwood))^(1/3)
+             h_top = max(h_top,0.01)
+             h_bottom = max(0,min(3,htop-1))
+          } else { 
+             # Grasses and unmanaged crops
+             h_top = max(0.25, tlai * 0.25)
+             h_top = max(htop,0.01)
+             h_bottom = max(0,min(0.05,h_top-0.2))
+          }
+       } else { 
+          # Simulated crops
+          if (crop_living_flag) {
+             h_top = ztopmx * min(tlai/laimx-1,1)^2
+             h_top = max(0.05, h_top)
+             h_bottom = 0.02  
+          } else {
+             h_top = 0
+             h_bottom = 0
+          }
+       }
     } else if (canopy_h_scheme == 'custom') {
-      # Implement your scheme here....
-      # h_top = ....
-      # h_bottom = ...
+       # Implement your scheme here....
+       # h_top = ....
+       # h_bottom = ...
     }
     h_top = max(0, h_top)
     h_bottom = max(0, h_bottom)

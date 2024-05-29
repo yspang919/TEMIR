@@ -12,7 +12,8 @@
 TEMIR_version = '2.0'
 
 # Set TEMIR directory:
-TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+# TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+TEMIR_dir = '/users/b146986/TEMIR_crop_published_ver/TEMIR/'
 
 # Set simulation parent directory:
 # Users can specify their customized parent directory for their simulations here.
@@ -23,13 +24,14 @@ sim_parent_dir = TEMIR_dir
 ################################################################################
 
 # Create a name for this simulation:
-simulation_name = 'test_v2.0'
+# simulation_name = 'test_v2.0'
+simulation_name = as.character(Sys.getenv("caseName_TEMIR"))
 
 # Simulation types:
 
 # not in old script
 # Simulating biogeochemistry? (default: FALSE)
-# If TRUE, leaf area index and stem area index are now prognostic instead of prescribed.
+# If TRUE, leaf area index and stem area index are now simulated instead of prescribed.
 biogeochem_flag = TRUE
 
 ################################################################################
@@ -71,7 +73,7 @@ file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/input_TEMIR.R'), t
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/find_hist_stat.R'), to = sim_dir)
 
 # Copy input script for the crop model (only after v2.0)
-if (TEMIR_version == '2.0') file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_biogeochem_extension.R'), to = sim_dir)
+if (TEMIR_version == '2.0' && biogeochem_flag) file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_crop_extension.R'), to = sim_dir)
 
 ################################################################################
 ### End of initialization

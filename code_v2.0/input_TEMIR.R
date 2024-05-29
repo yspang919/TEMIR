@@ -29,15 +29,19 @@ debug_flag = FALSE
 # Required directories:
 
 # Set TEMIR directory:
-TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+# TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+TEMIR_dir = '/users/b146986/TEMIR_crop_published_ver/TEMIR/'
 # Set source code directory:
 code_dir = paste0(TEMIR_dir, 'code_v2.0/')
 # Set meteorological data directory:
-met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5.d/')
+# met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5.d/')
+met_data_dir = '/users/b146986/TGABI_data/GEOS_2x2.5/'
 # Set PFT and surface data directory:
-surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
+# surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
+surf_data_dir = paste0('/users/b146986/TEMIR/TEMIR_inputs/surf_data/')
 # Set processed PFT and surface output directory:
-processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
+# processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
+processed_surf_data_dir = paste0('/users/b146986/TEMIR/TEMIR_inputs/processed_surf_data/')
 
 ################################################################################
 ### Model configuration:
@@ -59,8 +63,10 @@ dlat = 2.0
 lat = seq(-90, 90, by=dlat)
 
 # Model run dates:
-start_date = 20090601
-end_date = 20090602
+# start_date = 20090601
+# end_date = 20090602
+start_date = 20000101
+end_date = 20001231
 
 # Continue from previous run?
 # If set true, temporary data within 10 days before the start date are needed.
@@ -87,8 +93,10 @@ if (single_site_flag) {
       FLUXNET_site_id = "US-Ha1"
     } else {
     # Specify location (lon, lat) of local site of interest:
-      lon_sim = 8.4104
-      lat_sim = 47.2102
+      # lon_sim = 8.4104
+      # lat_sim = 47.2102
+      lon_sim = -91.5
+      lat_sim = 42.4
     }
 } else {
    # Specify range of lon/lat of a given region of interest:
@@ -103,7 +111,8 @@ if (single_site_flag) {
 # Which plant function type (PFT) to simulate?
 # Default PFTs follow the classification used in Community Land Model version 4.5 (CLM4.5) shown in PFT_df below
 # Please refer to each PFT by its PFT number quote in the first column of PFT_df
-sim_PFT = 1:24
+# sim_PFT = 1:24
+sim_PFT = 17
 
 # Default CLM4.5 PFT dataframe:
 # 1st col = PFT number; 2nd col = PFT description
@@ -164,7 +173,7 @@ radiative_scheme = 'two-stream'
 # If not, temperature and humidity at 2 m above displacement height will be used as proxies for temperature and humidity in canopy air.
 # NOTE: if FLUXNET_flag=TRUE (so FLUXNET data are used for simulation), infer_canopy_met_flag=FALSE by default, and what is set here will be ignored.
 # NOTE: This method always uses the default TEMIR aerodynamic conductance scheme, never the scheme used in "drydep_toolbox.R", please see dry deposition section below if concerned.
-infer_canopy_met_scheme_flag = FALSE
+infer_canopy_met_flag = FALSE
 
 # Soil layer option for computing soil water stress: ('bulk' or 'two-layer')
 soil_layer_scheme = 'two-layer'

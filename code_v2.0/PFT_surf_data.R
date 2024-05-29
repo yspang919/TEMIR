@@ -4,11 +4,9 @@
 
 # TODO
 # Fixing graincn[1:17] = 999; Should use the original value of NA instead of a numberic fill value to avoid confusion. May need to change the maintenace respiration / simulate_ij.R.
-# 10 levels of CLM soil layer (nlevsoi); 3 levels of TEMIR top soil layer (nlevsoi_top); 8 levels of CLM soil layers within TEMIR root zone (nlevsoi_root); 5 levels for soil temperature, may need to clarify it in the description
-# root fraction is now calculated here, need to amend maintenance_respiration.R
-# double check whether the changes in soil hydrological parameters match the version on latest version on github
 # # LAI_data_mon above is LAI per unit area of vegetated land, but we should use LAI per unit grid cell area for rescaling. We correct it by multiplying it with the fraction of vegetated land in a grid cell (Tai, Apr 2020) ------ is the LAI in the crop module consistent with it ????
 # Regriding crop calender and GDDmap in crop module: need to revise
+# More customize in reading input files from GDDmat_map_dir and crop_calender_map_dir
 
 # This module requires functions from "tools.R".
 # It requires data directories, "met_name", "lon", "lat", "dlon" and "dlat" defined and R packages loaded in "execution.R".
@@ -169,7 +167,6 @@ if (biogeochem_flag){
     earliest_planting_jday_possible_SH = c(rep(NA,17), rep(274,4), rep(121,2), rep(305,2))
     latest_planting_jday_possible_SH = c(rep(NA,17), rep(349,4), rep(151,2), rep(349,2))
 }
-
 nc_close(nc)
 
 # Canopy top height (m):
@@ -646,6 +643,8 @@ cat('\n')
 
 # Regridding the planting and harvesting date data if simulations require a map of prescribed planting date
 # The resolution of the default planting date map from Sack et al. 2010 is 0.5 x 0.5
+# TODO:
+# Change varialbe name e.g., tmp_planting_date_Sack_nc to adapt a general crop calender map input in the future (not necessary Sack et al. 2010)
 
 if ((biogeochem_flag && crop_planting_date_method == 'prescribed-map') || O3_POD) {
     
@@ -657,18 +656,18 @@ if ((biogeochem_flag && crop_planting_date_method == 'prescribed-map') || O3_POD
     if (dlon == 0.5 && dlat == 0.5) {
         # Simulation resolution is the same as the data, can be read in directly from .nc
         filename = 'Sack_crop_calendar.nc'
-        nc = nc_open(paste0(planting_date_map_dir, filename))
+        nc = nc_open(paste0(crop_calender_map_dir, filename))
         prescribed_planting_date_Sack = ncvar_get(nc, 'planting')
         prescribed_harvesting_date_Sack = ncvar_get(nc, 'harvest')
         nc_close(nc)
     } else {
         # Like the prescribed LAI and soil data, read in the RData contains the regridded data if it exists. Otherwise, regrid the nc data to a suitable resolution
-        filename = paste0(planting_date_map_dir,'crop_planting_harvesting_Sack_',dlat,'x',dlon,'.RData')
+        filename = paste0(crop_calender_map_dir, 'crop_planting_harvesting_Sack_',dlat,'x',dlon,'.RData')
         
-        if (!file.exists(filename)){
+        if (!file.exists(filename)) {
             # Read in the nc file and regrid the data to the simulation resolution
             nc_filename = 'Sack_crop_calendar.nc'
-            nc = nc_open(paste0(planting_date_map_dir, nc_filename))
+            nc = nc_open(paste0(crop_calender_map_dir, nc_filename))
             tmp_planting_date_Sack_nc = ncvar_get(nc, 'planting')
             tmp_harvesting_date_Sack_nc = ncvar_get(nc, 'harvest')
             
@@ -724,13 +723,15 @@ if ((biogeochem_flag && crop_planting_date_method == 'prescribed-map') || O3_POD
 ################################################################################
 
 # Regridding the growing degree day requirements for harvesting (GDDmat) if simulations require a map of prescribed GDDmat
+# TODO: automatically determine file resolution of the input file? Then no need to hard code for comparing simulation resolution and file resolution.
 
 if (biogeochem_flag) {
     if (GDDmat_method == 'prescribed-map') {
         if (dlon == 360/540 && dlat == 0.5) {
             # The simulation resolution is the same as the input
             filename = 'Sack_crop_calendar_GDDmat_0.667x0.5.nc'
-            nc = nc_open(paste0(Sack_GDDmat_dir, filename))
+            nc = nc_open(paste0(GDDmat_map_dir, filename))
+
             GDDmat_maize_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,1]
             GDDmat_soybean_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,2]
             GDDmat_springwheat_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,3]
@@ -740,11 +741,11 @@ if (biogeochem_flag) {
             warning('The GDDmat map has a resolution of 0.667x0.5. Simulation resoltuion is too high that there may be some problems in regridding.')
         } else {
             filename = paste0('regridded_crop_GDDmat_Sack_',dlon,'x',dlat,'.RData')
-            if (!file.exists(paste0(Sack_GDDmat_dir,filename))) {
-                print('Regridding GDDmat data derived from Sack et al. (2010)')
+            if (!file.exists(paste0(GDDmat_map_dir, filename))) {
+                print('Regridding GDDmat map')
                 # Regrid the nc input
                 nc_filename = 'Sack_crop_calendar_GDDmat_0.667x0.5.nc'
-                nc = nc_open(paste0(Sack_GDDmat_dir, nc_filename))
+                nc = nc_open(paste0(GDDmat_map_dir, nc_filename))
                 tmp_GDDmat_mean = ncvar_get(nc, 'GDDmat_mean') # dim() = 540lon x 361lat x 4crops
                 tmp_GDDmat_sd = ncvar_get(nc, 'GDDmat_sd') # this variable "may be" useful for adjusting GDDmat in a particular region (e.g., reduce the matuirty requirement by say: GDDmat = GDDmat_mean - GDDmat_sd)
                 lat_Sack = ncvar_get(nc, 'lat')
@@ -784,23 +785,20 @@ if (biogeochem_flag) {
                     print(paste0('Finished regridding derived GDDmat for ', crop_name_vec[z]))
                 }
                 
-                save(list = c('lon', 'lat', 'Sack_derived_GDDmat_mean', 'Sack_derived_GDDmat_sd', 'crop_name_vec'), file = paste0(Sack_GDDmat_dir,filename))
+                save(list = c('lon', 'lat', 'Sack_derived_GDDmat_mean', 'Sack_derived_GDDmat_sd', 'crop_name_vec'), file = paste0(GDDmat_map_dir, filename))
                 
                 rm(z, tmp_mean, tmp_sd, lat_Sack, lon_Sack, lat_diff_sack, lon_diff_sack, tmp_GDDmat_mean, tmp_GDDmat_sd, nc_filename)
             } else {
                 print(paste0('GDDmat map with suitable resolution is already existed'), quote = FALSE)
                 print(paste0('Loading ', filename, ' ...'), quote = FALSE)
-                load(paste0(Sack_GDDmat_dir,filename))
+                load(paste0(GDDmat_map_dir, filename))
                 for (z in seq(crop_name_vec)) {
                     assign(x = paste0('GDDmat_',crop_name_vec[z],'_map'), value = Sack_derived_GDDmat_mean[,,z])
                 }
             }
         }
-
-        
     }
 }
-
 
 ################################################################################
 ### Rescale and interpolate PFT-level LAI and SAI data: (Yung & Tai, Feb 2019)
