@@ -5,12 +5,11 @@
 
 ## TODO
 # Calculation of POD3 and its options 
-# PFT selection from BGC_input to the main_input.R now
 
 # Computing environment:
 
 # Run in cluster environment (i.e., not on personal computer)?
-cluster_flag = FALSE
+cluster_flag = TRUE
 
 # Number of cores to use:
 # This will be overwritten by system-dependent setting if "cluster_flag=TRUE".
@@ -78,7 +77,7 @@ continue_flag = FALSE
 ### Simulation site / region ###
 # Specify lon/lat for a single site or a given region (including global), or specify site ID if simulation is for a FLUXNET site.
 # Single site?
-single_site_flag = TRUE
+single_site_flag = FALSE
 
 # FLUXNET site?
 FLUXNET_site_flag = FALSE

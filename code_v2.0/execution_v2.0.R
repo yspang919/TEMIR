@@ -592,7 +592,7 @@ for (d in 1:n_day_sim) {
        if (GDDmat_method == "CLM4.5") {
            # For simplicity, we decide not to implement the moving average of GDDx like the one in CLM4.5, as the prediction of the change in planting/harvesting date are not very accurate anyway
            # We only use the GDDx map in yr 2000 and calculate the corresponding GDDmat
-           filename = paste0(GDDx_map_dir,'MEERA2_year_2000_growing_season_GDDx_map.nc')
+           filename = paste0(GDDmat_map_dir, 'MEERA2_year_2000_growing_season_GDDx_map.nc')
            nc = nc_open(filename)
            GDD0_map = ncvar_get(nc,"GDD0")
            GDD8_map = ncvar_get(nc,"GDD8")

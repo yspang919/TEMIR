@@ -142,7 +142,10 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
       DVI = 0 + (GDD_T2m - GDDemer) / (GDDrepr - GDDemer)
     } else if (GDD_T2m >= GDDrepr && GDD_T2m < GDDmat) {
       DVI = 1 + (GDD_T2m - GDDrepr) / (GDDmat - GDDrepr)
+    } else if (GDD_T2m >= GDDmat) {
+      DVI = 2
     }
+
     
     # print(paste0("[crop_phenology] GDDemer = ", signif(GDDemer, 5),"___GDDrepr = ",signif(GDDrepr, 5), "__ GDDmat = ", signif(GDDmat, digits = 4)))
 
@@ -254,9 +257,12 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
       DVI = NA
   }
   
-  cat(paste("Day of year = ", current_jday, "\nDay since planting = ", days_since_planting, 
-               "\nGDDT2m = ", signif(GDD_T2m,4), " (req = ", signif(GDDmat,4),' and ', signif(GDDrepr,4), ")", 
-               "\nGDDTsoil = ", signif(GDD_Tsoil,3), " (req = ", signif(GDDemer, 3),")", sep = ""))
+  if (crop_living_flag) {
+      cat(paste("Day of year = ", current_jday, "\nDay since planting = ", days_since_planting, 
+                "\nGDDT2m = ", signif(GDD_T2m,4), " (req = ", signif(GDDmat,4),' and ', signif(GDDrepr,4), ")", 
+                "\nGDDTsoil = ", signif(GDD_Tsoil,3), " (req = ", signif(GDDemer, 3),")", sep = ""))
+      print("")
+  }
   
   # List of outputs
   # Fluxes: seedC_to_leafC, leafC_loss, grainC_loss, livestemC_loss, finerootC_loss

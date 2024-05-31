@@ -86,7 +86,7 @@ natveg_C_partit_method = 'CLM4.5'
 #  In the Sack et al. (2010) dataset, there are primary and secondary crop growing season for maize and rice.
 #   - crop_growing_season can either be 'primary' and 'secondary'
 
-crop_planting_date_method = 'prescribed-map'
+crop_planting_date_method = 'CLM4.5'
 
 # Specify the directory name that contains the map of planting date (data is imported at PFT_surf_data.R)
 if (crop_planting_date_method == 'prescribed-map') {
@@ -110,7 +110,7 @@ if (crop_planting_date_method == 'prescribed-site') {
 # 'prescribed-map' (default): read in a regional/global map that contains GDDmat (in growing degree day) for different crops. The default input file contains GDDmat values derived using the planting and harvesting complied by Sack et al (2010). The GDDmat value in the file is the average GDDmat from year 1995 to year 2015 (assuming fixed planting and harvesting date). 
 # 'prescribed-site': enter a single GDDmat value (in growing degree day). Suitable for single-site simulations with pre-determined GDDmat.
 
-GDDmat_method = 'prescribed-map'
+GDDmat_method = 'CLM4.5'
 
 # Specify the directory name that contains the map of containing GDDmat files 
 if (any(GDDmat_method == c('CLM4.5', 'prescribed-map'))) {
@@ -167,7 +167,7 @@ crop_transloc_scheme = 'JULES'
 ## How is the leaf senescence rate and the timing of senescence parameterized in the model? ('CLM4.5', 'custom')
 # 'CLM4.5' (default): based on the leaf senescence rate described in CLM4.5 Technical Note. Leaf starts to fall at the beginning of the reproductive stage (i.e., GDD >= GDDrepr).
 # 'custom': implement your own leaf senescence scheme in at plant_phenology.R. Leaf loss does not necessary start at the beginning of the reporudctive stage. Please also modifiy the variable 'leaf_senescence_DVI' below if needed.
-crop_leaf_sen_scheme = 'custom'
+crop_leaf_sen_scheme = 'CLM4.5'
 
 # When is foliage loss observed in crops?
 # Development index DVI (value from -1 to 2) following JULES-crop definition.
