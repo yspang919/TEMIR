@@ -30,6 +30,10 @@ soilT_data_dir = '/lustre/project/TGABI/data/MERRA2_2x2.5_soilT/'
 
 ### Settings for the simulation of all vegetation ###
 
+# Minimum coverage fraction of a PFT for that PFT to be simulated in a grid cell (a number between 0 to 1)
+# By default, TEMIR only simulates a PFT if its coverage (relative to the land surface) is greater than 1%.
+PFT_frac_threshold = 0.01
+
 # Data Source of soil temperature input for the calculation of maintenance respiration ('MERRA2' or 'custom')
 # 'MERRA2': using the soil temperature from MERRA-2 (5 layers of soil temperature)
 # 'custom': using your own soil temperature data (single- or multilayer), the depth of the bottom of each layer must be provided if there are more than one layer

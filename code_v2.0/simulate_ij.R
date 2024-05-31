@@ -192,7 +192,11 @@ f_simulate_ij = function(IJ) {
       }
       # print(paste0('biogeochem_flag = ', biogeochem_flag, ' LAI = ', LAI))
       # Propose adding a message that a PFT is skipped for single site simulations. It is often difficult to diagnose when users see a bunch of NA in their outputs. (Pang, May 2024)
-      if ((LAI < 0.01 && !biogeochem_flag) | PFT_frac[i,j,ipft] < 0.01) {
+      
+      # Minimum PFT fraction required that a PFT is simulated in grid cell
+      PFT_frac_min = if (biogeochem_flag) PFT_frac_threshold else 0.01
+
+      if ((LAI < 0.01 && !biogeochem_flag) | PFT_frac[i,j,ipft] < PFT_frac_min) {
          # Too little vegetation. Skip current PFT calculations.
           if (single_site_flag && d == 1) {
             print(paste0("Skip calculation for ipft = ", ipft, " - ", pftname[ipft], ' PFT_frac = ', PFT_frac[i,j,ipft])) 
