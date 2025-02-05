@@ -34,6 +34,12 @@ met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5.d/')
 surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
 # Set processed PFT and surface output directory:
 processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
+# Set the directory that contains the flux tower measurement inpit (Syam)
+flux_tower_input_dir = ....
+
+# Run the simulation with flux tower measurements? (Syam)
+# Please modifiy read_tower_input.R if needed
+read_flux_met_file_flag = FALSE
 
 ################################################################################
 ### Model configuration:
@@ -54,9 +60,9 @@ lon = seq(-180, 177.5, by=dlon)
 dlat = 2.0
 lat = seq(-90, 90, by=dlat)
 
-# Model run dates:
-start_date = 20090601
-end_date = 20090602
+# Model run dates:  
+start_date = 20190501   # Modified (Syam)
+end_date = 20190930
 
 # Continue from previous run?
 # If set true, temporary data within 10 days before the start date are needed.
@@ -82,8 +88,8 @@ if (single_site_flag) {
       FLUXNET_site_id = "US-Ha1"
    } else {
       # Specify location (lon, lat) of local site of interest:
-      lon_sim = 8.4104
-      lat_sim = 47.2102
+      lon_sim = 78.40     # Modified (Syam)
+      lat_sim = 17.32
    }
 } else {
    # Specify range of lon/lat of a given region of interest:
@@ -98,7 +104,8 @@ if (single_site_flag) {
 # Which plant function type (PFT) to simulate?
 # Default PFTs follow the classification used in Community Land Model version 4.5 (CLM4.5) shown in PFT_df below
 # Please refer to each PFT by its PFT number quote in the first column of PFT_df
-sim_PFT = 1:24
+# sim_PFT = 1:24
+sim_PFT = 18   # Only simulate maize (Syam)
 
 # Default CLM4.5 PFT dataframe:
 # 1st col = PFT number; 2nd col = PFT description
@@ -138,7 +145,7 @@ PFT_df = `colnames<-`(rbind.data.frame(
 ### Basic ecosystem model parameters ###
 
 # Ambient CO2 concentration (ppm):
-CO2_conc = 390
+CO2_conc = 408
 
 # Fixed photosynthetic parameters:
 # Nitrogen extinction coefficient:

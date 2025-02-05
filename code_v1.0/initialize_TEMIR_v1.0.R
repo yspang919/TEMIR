@@ -18,7 +18,7 @@ sim_parent_dir = TEMIR_dir
 ################################################################################
 
 # Create a name for this simulation:
-simulation_name = 'test_v1.0'
+simulation_name = 'Syam_test_case'
 
 ################################################################################
 ### Check TEMIR model availability:

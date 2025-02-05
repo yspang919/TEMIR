@@ -19,6 +19,9 @@ library(maps) # For map display
 suppressMessages(library(fields)) # For spatial data
 timestamp()
 
+library(dplyr) # additional packages for Syam
+library(zoo) # additional packages for Syam
+
 ################################################################################
 ### Source input scripts for model configuration:
 ################################################################################
@@ -83,6 +86,9 @@ if (FLUXNET_site_flag) source(paste0(code_dir, 'FLUXNET_functions.R'))
 
 # Surface and PFT input parameters (prescribed):
 source(paste0(code_dir, 'PFT_surf_data.R'))
+
+# Reading flux tower input for the simulation (Syam):
+if (read_flux_met_file_flag) source(paste0(code_dir, 'read_tower_input.R'))
 
 ################################################################################
 ### Define additional dimensional and variable info:
@@ -473,6 +479,51 @@ for (d in 1:n_day_sim) {
    # Close nc file:
    nc_close(nc)
    
+   # Replaced the MERRA2 input with flux tower input if needed (Syam)
+   if (read_flux_met_file_flag) {
+
+      # obtain the data at the current simulation date
+      daily_flux_met_df = full_flux_met_df %>% 
+                        filter(UTC_time >= as.POSIXct(paste0(current_date,' 00:00'), format = '%Y%m%d %H:%M', tz = 'UTC') &
+                              UTC_time <= as.POSIXct(paste0(current_date, ' 23:00'), format = '%Y%m%d %H:%M', tz = 'UTC'))
+
+      # if there is flux tower at that simulation date
+      if (nrow(daily_flux_met_df) > 0) {
+         # loop through the variables that would replace MERRA2 data 
+         for (index in 1:length(desired_flux_tower_MET_varaibles)) {
+            
+            # get the flux tower measurement value
+            tower_meas_val = daily_flux_met_df %>% pull(desired_flux_tower_MET_varaibles[index])
+            replacing_MERRA2 = FALSE
+
+            # check if that measurements have non-NA values
+            if (any(is.na(tower_meas_val))) {
+               if (!is.na(tower_meas_val[1] & !is.na(tower_meas_val[24]))) {
+                  # values present in hour 0 and 23, interpolate the NA value
+                  tower_meas_val = na.approx(tower_meas_val, na.rm = FALSE)
+                  replacing_MERRA2 = TRUE
+               } else {
+                  # missing value for hour 0 or 23, just use MERRA2...
+                  replacing_MERRA2 = FALSE
+               }
+            } else {
+               # no missing value, replacing MERRA2 input
+               repalcing_MERRA2 = TRUE
+            }
+
+            MERRA2_var_name = replace_MERRA2_df$MERRA2_TEMIR_name[which(replace_MERRA2_df$site_met_name == desired_flux_tower_MET_varaibles[index])]
+            if (replacing_MERRA2) {
+               # getting site-measured met data, will replace the input at simulate_ij.R
+               # Special case: PAR_total, SWC, RH
+               assign(x = MERRA2_var_name, value = tower_meas_val)
+            } else {
+               assign(x = MERRA2_var_name, value = NA)
+            }
+         }
+      }
+   }
+
+
    # Load FLUXNET meteorology if FLUXNET_flag=TRUE:
    if (FLUXNET_flag) {
       

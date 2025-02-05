@@ -104,6 +104,20 @@ f_simulate_ij = function(IJ) {
    # 3rd dim of "soil albedo" = [dry (visible), dry (Near IR), saturated (visible), saturated (Near IR)]
    alpha_soil_dry = soil_albedo[i,j,1]
    alpha_soil_sat = soil_albedo[i,j,3]
+
+   # Replace soil properties with site measurement (Syam)
+   # single layer of site, top and bottom have the same property
+   b_psi = site_b_psi
+   b_psi_top = site_b_psi
+   b_psi_bottom = site_b_psi
+
+   psi_sat = site_psi_sat
+   psi_sat_top = site_psi_sat
+   psi_sat_bottom = site_psi_sat
+
+   theta_sat = 
+   theta_sat_top = 
+   theta_sat_bottom = 
    
    # Other model parameters:
    met_cond_flag = TRUE
@@ -118,10 +132,27 @@ f_simulate_ij = function(IJ) {
       
       # Leaf area index (m^2 m^-2):
       n_PAI = if (leap & as.numeric(MM) > 2) n_day_whole - 1 else n_day_whole
-      LAI = LAI_day_PFT[i,j,ipft,n_PAI]
+
+      # Modified for Syam
+      if (read_flux_met_file_flag && replace_MERRA2_df$replace_MERRA2_flag[which(replace_MERRA2_df$site_met_name == 'LAI')]) {
+         # replace LAI with site measurement (dimension: time)
+         daily_flux_tower_LAI = full_flux_LAI_df %>%
+                              filter(UTC_time >= as.POSIXct(paste0(current_date, ' 00:00'), format = '%Y%m%d %H:%M', tz = 'UTC') & 
+                              UTC_time <= as.POSIXct(paste0(current_date, ' 23:00'), format = '%Y%m%d %H:%M', tz = 'UTC')) %>%
+                              pull(LAI)
+         if (length(daily_flux_tower_LAI) == 0) {
+            # site LAI is not avaiable on that day... assume 0
+            LAI = 0
+         } else {
+            LAI = daily_flux_tower_LAI   # should be free of NA values....
+         }     
+      } else {
+         # default (LAI is from a map with dimension lon x lat x ipft x time)
+         LAI = LAI_day_PFT[i,j,ipft,n_PAI]
+      }
       
-      if (LAI < 0.01 | PFT_frac[i,j,ipft] < 0.01) {
-         
+      # if (LAI < 0.01 | PFT_frac[i,j,ipft] < 0.01) {    # default (modified for Syam)
+      if (LAI == 0) {   # PFT_frac requirement removed for Syam
          # Too little vegetation. Skip current PFT calculations.
          next
          
@@ -208,6 +239,22 @@ f_simulate_ij = function(IJ) {
             # Incoming shortwave radiation (W m^-2):
             swr = SWGDN[i,j,h] 
             
+            # replacing MERRA2 data with site measurements for PAR, SWR (Syam)
+            if (read_flux_met_file_flag) {
+               if (exists(PAR_total)) {
+                  # use ratio of direct/diffuse PAR in MERRA2 to calculate direct/diffuse PAR based on total PAR measurement
+                  PARDR_ratio = if (PAR_beam > 0 | PAR_diff > 0) {PAR_beam/(PAR_beam+PAR_diff)} else {NA}
+                  if (!is.na(PARDR_ratio)) {
+                     PAR_beam = PAR_total[h] * PARDR_ratio
+                     PAR_diff = PAR_total[h] * (1-PARDR_ratio)
+                  }
+               }
+
+               if (exists(site_SWGDN)) {
+                  swr = site_SWGDN[h]
+               }
+            }
+
             ####################################################################
             
             # Micrometeorological variables:
@@ -228,6 +275,8 @@ f_simulate_ij = function(IJ) {
             slp = SLP[i,j,h]
             # Atmospheric temperature at 2 m above displacement height (K):
             T_2m = T2M[i,j,h]
+            if (read_flux_met_file_flag && !is.na(site_T2M)) {T_2m = site_T2M[h]}    # Syam 
+
             # Atmospheric temperature at 10 m above displacement height (K):
             T_10m = T10M[i,j,h]
             # Specific humidity at 2 m above displacement height (kg kg^-1):
@@ -236,7 +285,8 @@ f_simulate_ij = function(IJ) {
             # q_10m = QV10M[i,j,h]
             # Wind speed at 10 m above displacement height (m s^-1):
             u_10m = if (FLUXNET_flag) WS[i,j,h] else sqrt(U10M[i,j,h]^2 + V10M[i,j,h]^2)
-            
+            if (read_flux_met_file_flag && !is.na(site_u10m)) {u_10m = site_u10m[h]}    # Syam
+
             # Variables below are needed for dry deposition (Sun, Oct 2018):
             # Liquid Precipitation (kg m-2 s-1): 
             prec_liq = if (FLUXNET_flag) PRECTOT[i,j,h] else PRECTOT[i,j,h] - PRECSNO[i,j,h] 
@@ -251,11 +301,12 @@ f_simulate_ij = function(IJ) {
             # P_surf = slp*(1 - 0.0065*Z_surf/(T_2m + 0.0065*(Z_surf + Z_disp + Z_0m + 2)))^5.257
             # Pressure at zero-plane displacement height (d + z0m) where wind speed is extrapolated to zero (Pa):
             P_disp = if (FLUXNET_flag) ATMP[i,j,h] else slp*exp(-(Z_surf + Z_disp + Z_0m)/Z_scale)
-            
+
             # At 2 m above displacement height:
             # Define T = theta at the surface.
             # Atmospheric pressure (Pa):
             P_2m = if (FLUXNET_flag) ATMP[i,j,h] else slp*exp(-(Z_surf + Z_disp + Z_0m + 2)/Z_scale)
+            if (read_flux_met_file_flag && !is.na(site_P_2m)) {P_2m = site_P_2m[h]}    # Syam
             # Atmospheric potential temperature (K):
             theta_2m = if (FLUXNET_flag) T_2m + (g_E/c_p)*(Z_disp + Z_0m + 2) else T_2m*(P_surf/P_2m)^(R_da/c_p)
             # Vapor pressure (Pa):
@@ -267,6 +318,7 @@ f_simulate_ij = function(IJ) {
             # Define T = theta at the surface.
             # Atmospheric pressure (Pa):
             P_10m = if (FLUXNET_flag) ATMP[i,j,h] else slp*exp(-(Z_surf + Z_disp + Z_0m + 10)/Z_scale)
+            if (read_flux_met_file_flag && !is.na(site_P_2m)) {P_10m = site_P_2m[h]}    # Syam, assume P_10m = P_2m
             # Atmospheric potential temperature (K):
             # Define T = theta at the surface.
             theta_10m = if (FLUXNET_flag) T_10m + (g_E/c_p)*(Z_disp + Z_0m + 10) else T_10m*(P_surf/P_10m)^(R_da/c_p)
@@ -349,7 +401,7 @@ f_simulate_ij = function(IJ) {
             
             # Vapor pressure deficit (kPa) (Sun, Oct 2018): 
             vpd = max(0, (f_esat(T_a) - e_a)/1000)
-            
+            if (read_flux_met_file_flag && !is.na(site_vpd)) {vpd = site_vpd[h]}    # Syam
             # Ambient (canopy) air CO2 partial pressure (Pa):
             c_a = CO2_conc*1e-6*P_atm
             # Wind speed incident on leaf (equivalent to "u_star") (m s^-1):
@@ -372,6 +424,13 @@ f_simulate_ij = function(IJ) {
             # Cloud fraction (0-1):
             cldtot = CLDTOT[i,j,h]
             
+            if (read_flux_met_file_flag && !is.na(site_SWC)) {  # Syam
+               # use 1 SWC measurement to represent root zone, top zone, and bottom zone soil wetness in the model
+               soil_wetness_root = site_SWC[h] / theta_sat_top / 100
+               soil_wetness_top = site_SWC[h] / theta_sat_top / 100
+               soil_wetness_bottom = site_SWC[h] / theta_sat_bottom / 100     # check unit later.....
+            }
+
             ####################################################################
             
             # Ozone concentration in air
@@ -502,6 +561,11 @@ f_simulate_ij = function(IJ) {
                                     psi_sat_bottom=psi_sat_bottom, b_psi_bottom=b_psi_bottom,
                                     multilayer = soil_layer_scheme)
             
+            # For Syam
+            if (read_flux_met_file_flag && force_crop_irrigation) {
+               beta_t = 1
+            }
+
             # Find canopy photosynthesis:
             canopy_photosyn = f_canopy_photosyn(c_a=c_a, e_a=e_a, 
                                                 phi_sun=phi_sun, 
