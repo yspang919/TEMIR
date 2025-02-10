@@ -16,7 +16,7 @@ n_core = parallel::detectCores()
 
 # Debugging mode?
 # If turned on, no output data will be saved externally. Debugging mode should be run only in an R console environment (i.e., not via a UNIX command line), and best for single-site simulation.
-debug_flag = TRUE
+debug_flag = FALSE
 
 ################################################################################
 ### Directories:
@@ -25,21 +25,24 @@ debug_flag = TRUE
 # Required directories:
 
 # Set TEMIR directory:
-TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+# TEMIR_dir = '~/Documents/TGABI/Models/TEMIR/'
+TEMIR_dir = 'C:/Users/jacky/Documents/TEMIR/'
 # Set source code directory:
-code_dir = paste0(TEMIR_dir, 'code_v1.0/')
+# code_dir = paste0(TEMIR_dir, 'code_v1.0/')
+code_dir = 'C:/Users/jacky/OneDrive/Documents/GitHub/TEMIR/code_v1.0/'
 # Set meteorological data directory:
 met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5.d/')
 # Set PFT and surface data directory:
 surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
 # Set processed PFT and surface output directory:
 processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
-# Set the directory that contains the flux tower measurement inpit (Syam)
-flux_tower_input_dir = ....
+
 
 # Run the simulation with flux tower measurements? (Syam)
 # Please modifiy read_tower_input.R if needed
 read_flux_met_file_flag = FALSE
+# Set the directory that contains the flux tower measurement inpit (Syam)
+flux_tower_input_dir = paste0(TEMIR_dir, 'TEMIR_inputs/additional_inputs/')
 
 ################################################################################
 ### Model configuration:
@@ -145,6 +148,7 @@ PFT_df = `colnames<-`(rbind.data.frame(
 ### Basic ecosystem model parameters ###
 
 # Ambient CO2 concentration (ppm):
+# Syam: year 2019 ~ 408 ppm
 CO2_conc = 408
 
 # Fixed photosynthetic parameters:

@@ -7,12 +7,13 @@ force_crop_irrigation = FALSE
 # Update soil composition at site (assume signle-layer soil)
 # It will replace the default 2.5x2 deg. CLM land surface soil data
 # Soil hydraulic properties are handled in PFT_surf_data.R
+# If force_crop_irrigation == TRUE, soil composition does not affect the simulation
 # soil sand percentage (%)
-site_sand_pct = 40
+site_sand_pct = 65
 # soil clay percentage (%)
-site_clay_pct = 30
+site_clay_pct = 10
 # soil organic matter fraction (fraction)
-site_om_frac = 0.10
+site_om_frac = 0.05
 
 # calculate site soil hydraulic properties 
 # saturated volumetric water content
@@ -42,14 +43,16 @@ replace_MERRA2_df = `colnames<-`(rbind.data.frame(
    c('RH',      'site_RH',         FALSE),     # relative humidity (%)
    c('VPD',     'site_vpd',        TRUE),     # vapor pressure defitcit (kPa) 
    c('WS',      'site_u10m',       TRUE),      # wind speed (m s-1)
-   c('LAI',     'LAI',             TRUE),     # leaf area index (m2 m-2)
+   c('LAI',     'LAI',             TRUE),          # leaf area index (m2 m-2)
    c('SWC',     'site_SWC',        TRUE),     # soil water content (fraction)
    c('SW_IN',   'site_SWGDN',      TRUE),     # incoming shortwave radidation (W m-2) 
    # c('LW_IN', , FALSE),                      # longwave radiation (not used)
    # c('NetRad', , FALSE),                     #  net radiation (not used)
    c('PPFD_TOT', 'PAR_total',      TRUE),      # total PAR (W m-2)
    stringsAsFactors = FALSE),
-   c('site_met_name', 'MERRA2_TEMIR_name', 'replace_MERRA2_flag'))
+   c('site_met_name', 'MERRA2_TEMIR_name', 'replace_MERRA2_flag')) %>%
+   # convert column 3 to logical
+   mutate(replace_MERRA2_flag = as.logical(replace_MERRA2_flag))
 
 
 
