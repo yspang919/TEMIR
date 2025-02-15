@@ -8,6 +8,11 @@ rm(list = ls())
 # require tools.R in TEMIR
 source('C:/Users/jacky/OneDrive/Documents/GitHub/TEMIR/code_v1.0/tools.R')
 
+# create csv file?
+# only applicable for single PFT and single grid cell simulations
+create_csv_flag = TRUE
+
+
 # base directory that contain all the simulation cases
 run_dir='C:/Users/jacky/Documents/TEMIR/'
 
@@ -37,7 +42,7 @@ hourly_variable = c('A_can', 'g_can', 'g_s', 'LAI_sun', 'LAI_sha')
 ###
 # 'daily': aggregating hourly variables for calculating daily mean
 # 'hourly': keep the hourly variable as it (dim: lon x lat x #plant functional group x #hour of the simulation)
-output_method = 'hourly'
+output_method = 'daily'
 
 # process which PFT in theoutputs?
 # refer to 'PFT_df' in input_TEMIR.R
@@ -48,10 +53,11 @@ target_PFT = c(18)
 day_vec = make.date.vec(start.date = start_date, end.date = end_date)
 time_start = as.Date(start_date, format = '%Y%m%d')
 time_end = as.Date(end_date, format = '%Y%m%d')
+
 if (output_method == 'daily') {
     time_start = as.Date(as.character(start_date), format = '%Y%m%d')
     time_end = as.Date(as.character(end_date), format = '%Y%m%d')
-    time_vec = seq.POSIXt(from = time_start, to = time_end, by = 'day')
+    time_vec = seq.POSIXt(from = as.POSIXct(time_start, tz = 'UTC'), to = as.POSIXct(time_end, tz = 'UTC'), by = 'day')
 }  else if (output_method == 'hourly') {
     time_start = as.Date(as.character(start_date), format = '%Y%m%d')
     time_end = as.Date(as.character(end_date), format = '%Y%m%d')
@@ -189,5 +195,84 @@ for (day in seq(day_vec)) {
     print(paste0('Finished day = ',day, ' date = ', day_vec[day]))
 }
 
-print('Finished without error')
+print('Finished creating .RData without error')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# starting creating csv file
+if (create_csv_flag) {
+    if (length(target_PFT) > 1) {
+        stop('create_csv_flag is only applicable for single PFT simulations')
+    }
+
+    if (length(lon) > 1 || length(lat) > 1) {
+        stop('create_csv_flag is only applicable for single grid cell simulations')
+    }
+
+    if (output_method == 'hourly') {
+
+        # create one csv file for hourly variables and one for daily variables
+        if (!is.null(hourly_variable)) {
+            df_csv_hourly = data.frame(UTC_time = time_vec, UTC_year = as.numeric(format(time_vec, '%Y')), 
+                                    UTC_jday = as.numeric(format(time_vec, '%j')), UTC_hour = as.numeric(format(time_vec, '%H')))
+        
+            for (i in seq(hourly_variable)) {
+                df_csv_hourly[[hourly_variable[i]]] = get(paste0('hourly_',hourly_variable[i]))
+            }
+
+            # save the dataframe as csv file
+            write.csv(df_csv_hourly, file = paste0(casename,'_hourly.csv'))
+            print(paste0('Finished creating csv file for hourly variables: ', paste0(getwd(), '/', casename,'_hourly.csv')))
+        }
+
+        # create one csv file for daily variables
+        if (!is.null(daily_variable)) {
+            df_csv_daily = data.frame(UTC_time = time_vec, UTC_year = as.numeric(format(time_vec, '%Y')), 
+                                    UTC_jday = as.numeric(format(time_vec, '%j')))
+        
+            for (i in seq(daily_variable)) {
+                df_csv_daily[[daily_variable[i]]] = get(paste0('daily_',daily_variable[i]))
+            }
+
+            # save the dataframe as csv file
+            write.csv(df_csv_daily, file = paste0(casename,'_daily.csv'))
+            print(paste0('Finished creating csv file for daily variables: ', paste0(getwd(), '/', casename,'_daily.csv')))
+        }
+
+    } else if (output_method == 'daily') {
+        # create one csv file for both daily variables and aggregated hourly variables
+        df_csv_daily = data.frame(UTC_time = time_vec, UTC_year = as.numeric(format(time_vec, '%Y')), 
+                                UTC_jday = as.numeric(format(time_vec, '%j')))
+        
+        if (!is.null(daily_variable)) {
+            for (i in seq(daily_variable)) {
+                df_csv_daily[[daily_variable[i]]] = get(paste0('daily_',daily_variable[i]))
+            }
+        }
+
+        if(!is.null(hourly_variable)) {
+            for (i in seq(hourly_variable)) {
+                df_csv_daily[[hourly_variable[i]]] = get(paste0('dailyAvg_hourly_',hourly_variable[i]))
+            }
+        }
+        
+        # save the dataframe as csv file
+        write.csv(df_csv_daily, file = paste0(casename,'_daily.csv'))
+        print(paste0('Finished creating csv file for daily variables: ', paste0(getwd(), '/', casename,'_daily.csv')))
+    }
+
+    print('Finished creating csv file without error')
+}
 
