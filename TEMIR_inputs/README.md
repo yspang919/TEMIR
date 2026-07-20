@@ -1,26 +1,33 @@
 # TEMIR Input Data
 
-This repository keeps the TEMIR input-folder structure, but large input data
-files are not included in the GitHub version of TEMIR v2.0.
+This `TEMIR_inputs/` directory in the GitHub repository does **not** contain the large TEMIR input datasets. In practice, the GitHub repository contains the model code and description files only.
 
-The folder layout is preserved so a new user can place the required inputs in
-the expected locations without changing the default scripts.
+The required input folders and files are provided through Zenodo, not GitHub:
 
-Large inputs that are expected but not tracked here include:
+- Zenodo input package: [https://doi.org/10.5281/zenodo.21408341](https://doi.org/10.5281/zenodo.21408341)
 
-- meteorological reanalysis input under `met_data/`
-- soil temperature maps under `soilT_map/`
-- land surface and processed surface data under `surf_data/` and `processed_surf_data/`
-- crop calendar and GDD maps under `crop_calender/`, `CLM4.5_GDDx_map/`, and `GDDmat_maps/`
-- ozone input under `o3_input/`
-- initial data under `initial_data/`
-- dry deposition constants under `Wesely_const/`
+After downloading the Zenodo archive, unzip its contents so that the folders are placed directly beneath:
 
-The small example single-site input case is kept under:
+`.../TEMIR/TEMIR_inputs/`
 
-- `site_measurements_inputs/example_case001/`
+## Input folders included in the Zenodo package
 
-For downloading the required TEMIR inputs, see:
+**Inputs folders TEMIR v2.0**
+- `initial_data/`: CLM4.5 initial data for initializing a simulation
+- `met_data/`: MERRA-2 global meteorological forcing for the example test case (2010-04-01 to 2010-09-30)
+- `soilT_map/`: MERRA-2 five-layer soil temperature data for the example test case
+- `surf_data/`: raw CLM land surface data and PFT-specific biochemical and biophysical parameters
+- `processed_surf_data/`: processed land surface data used by TEMIR simulations
+- `crop_calender/`: global crop calendar based on Sacks et al. (2010)
+- `GDDmat_maps/`: maps of the growing degree day requirement for crop maturity
+- `CLM4.5_GDDx_map/`: CLM4.5-based GDDx maps used for climate-based crop planting
+- `site_measurements_inputs/`: example site-level meteorology, LAI, and ozone inputs for a test-case crop simulation
+- `FLUXNET/`: FLUXNET2015 site information distributed with the TEMIR input package; full FLUXNET data should still be obtained from the FLUXNET data portal if needed
+- `Wesely_const/`: dry deposition constants
+- `LAI_data/`: MODIS LAI data
 
-- `Download_data_here.txt`
+## Additional notes
 
+- `o3_input/` is **not** bundled in the GitHub repository. Users may create `TEMIR_inputs/o3_input/` and place ozone map inputs there if ozone simulations are required.
+- The input archive is intended to support the example test-case simulation distributed with TEMIR v2.0.
+- Folder names should remain unchanged after unzipping so the default TEMIR scripts can locate the input files correctly.
