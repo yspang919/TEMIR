@@ -1,5 +1,5 @@
 ################################################################################
-### Terrestrial Ecosystem Model in R (TEMIR) v1.1
+### Terrestrial Ecosystem Model in R (TEMIR) v2.0
 ### Initialization script for single-site, regional or global simulation
 ################################################################################
 

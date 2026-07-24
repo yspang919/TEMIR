@@ -1,6 +1,6 @@
 ################################################################################
 ### Terrestrial Ecosystem Model in R (TEMIR)
-### Input script for single-site, regional or global simulation
+### Input setting script for plant-ecophysiological simulations
 ################################################################################
 
 # Computing environment:

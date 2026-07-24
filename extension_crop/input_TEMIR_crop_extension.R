@@ -1,6 +1,6 @@
 ################################################################################
 ### Terrestrial Ecosystem Model in R (TEMIR)
-### Input script for the crop model extension and biogeochemistry (in development)
+### Input setting script for the carbon-vegetation and crop model 
 ################################################################################
 
 # Directory for storing starting conditions (initial data)

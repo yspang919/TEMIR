@@ -1,6 +1,6 @@
 ################################################################################
 ### Terrestrial Ecosystem Model in R (TEMIR)
-### Input script for using custom inputs to replace default input maps for single site simulations
+### Input script for using custom inputs to replace input maps in single site simulations
 ################################################################################
 
 # In this script, users can specify variables that are read from maps and replace them with observation data for single-site simulations.
