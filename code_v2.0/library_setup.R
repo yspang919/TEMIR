@@ -33,11 +33,11 @@ cran_repo = 'https://cloud.r-project.org'
 base_package_vec = c('parallel')
 
 # External packages required by TEMIR.
-# Replace NA with tested version strings after the package set is finalized.
+# Tested with R version 4.5.1
 package_df = data.frame(
     package = c('dotCall64', 'stringr', 'abind', 'ncdf4', 'filesstrings',
                 'spam', 'maps', 'fields', 'lubridate', 'dplyr', 'readxl'),
-    version = c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA),
+    version = c('1.2', '1.5.1', '1.4.8', '1.24', '3.4.0', '2.11.4', '3.4.3', '17.3', '1.94', '1.1.4', '1.4.5'),
     stringsAsFactors = FALSE
 )
 
