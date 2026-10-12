@@ -25,6 +25,12 @@ if (file.exists('input_TEMIR_crop_extension.R')) {
     biogeochem_flag = FALSE
 }
 
+if (met_name == 'CUSTOM') {
+    source('settings_custom_met_inputs.R')
+    if (!custom_wind_input %in% c('speed', 'components')) stop('Invalid custom_wind_input')
+    if (!custom_pressure_input %in% c('surface', 'sea_level')) stop('Invalid custom_pressure_input')
+}
+
 # Loading required libraries
 source('library_setup.R')
 
@@ -41,6 +47,12 @@ if (single_site_flag && use_site_obs_flag) {
 
 # Check existence of directory paths:
 dir_check = ls(pattern = "_dir$")
+if (met_name == 'CUSTOM') {
+    dir_check = setdiff(dir_check, 'met_data_dir')
+}
+if (biogeochem_flag && T_soil_source == 'custom') {
+    dir_check = setdiff(dir_check, 'soilT_data_dir')
+}
 for (idir in seq_along(dir_check)) {
    if (!dir.exists(paths = get(dir_check[idir]))) stop(paste0(dir_check[idir], ' does not exist!'))
 } ; rm(dir_check, idir)
@@ -297,6 +309,15 @@ input_data_df = `colnames<-`(rbind.data.frame(
   c('TEMIR_var_name', 'TEMIR_unit', 'MERRA2_var_name', 'MERRA2_unit_differ', 
     'GEOSFP_var_name', 'GEOSFP_unit_differ'))
 
+if (met_name == 'CUSTOM') {
+   # Surface pressure is an alternative to SLP only for custom map forcing.
+   input_data_df[nrow(input_data_df) + 1,] = c('PS', 'Pa', NA, FALSE, NA, FALSE)
+   input_data_df$CUSTOM_var_name = f_custom_met_columns(
+      input_data_df$TEMIR_var_name, custom_met_vars,
+      custom_wind_input, custom_pressure_input)
+   input_data_df$CUSTOM_unit_differ = FALSE
+}
+
 if (FLUXNET_site_flag && FLUXNET_flag) {
   # using FLUXNET meteorological input
   updated_input_df = merge.data.frame(x = input_data_df, y = FLUXNET_input_data_df, by = 'TEMIR_var_name', all = TRUE)
@@ -370,10 +391,10 @@ for (d in 1:n_day_sim) {
             last_YYYY_LAI = as.character(LAI_used_years[which(year_vec == as.numeric(YYYY)) - 1])
             if (length(last_YYYY_LAI) == 0) last_YYYY_LAI = 'no_YYYY_LAI'
             if (YYYY_LAI != last_YYYY_LAI) {
-               subfn = paste0('daily_monthly_LAI_data_', YYYY_LAI, '.RData')
-               filename = paste0(processed_surf_data_dir, subfn)
+               filename = f_grid_cache_path(processed_surf_data_dir,
+                                            paste0('daily_monthly_LAI_data_', YYYY_LAI), lon, lat)
                print(paste0('Loading existing daily LAI and SAI data for year ', YYYY_LAI, '...'), quote=FALSE)
-               load(filename)
+               f_load_grid_cache(filename, lon, lat)
             }
          }
       }
@@ -425,12 +446,16 @@ for (d in 1:n_day_sim) {
    } else if (met_name == 'MERRA2') {
       subdir = 'MERRA2/'
       file_ext = 'nc4'
+   } else if (met_name == 'CUSTOM') {
+      filename = custom_met_file(paste0(YYYY, MM, DD))
    } else {
       stop('met_name specified is not available!')
    }
    
-   subfn = paste0(subdir, YYYY, '/', MM, '/', met_name, '.', YYYY, MM, DD, '.A1.2x25.', file_ext)
-   filename = paste0(met_data_dir, subfn)
+   if (met_name != 'CUSTOM') {
+      subfn = paste0(subdir, YYYY, '/', MM, '/', met_name, '.', YYYY, MM, DD, '.A1.2x25.', file_ext)
+      filename = paste0(met_data_dir, subfn)
+   }
    # These met fields are 1-hour average starting from 00:00 UTC of the day.
    
    # Open nc file:
@@ -444,7 +469,8 @@ for (d in 1:n_day_sim) {
       met_variable_name = as.character(updated_input_df[,paste0(met_name, '_var_name')][imet])
       
       # Load particular meteorological data if variable exists in global meteorological field:
-      if (!is.na(met_variable_name)) if (is.na(as.logical(met_variable_name))) assign(x = TEMIR_variable_name, value = ncvar_get(nc, met_variable_name)) else next
+      if (is.na(met_variable_name)) next
+      assign(x = TEMIR_variable_name, value = ncvar_get(nc, met_variable_name))
       
       # Get meteorological field dimension for FLUXNET conformity:
       if (!exists('met_dim') && FLUXNET_flag) met_dim = dim(get(x = TEMIR_variable_name))
@@ -506,8 +532,12 @@ for (d in 1:n_day_sim) {
          }
          
        } else if (T_soil_source == 'custom') {
-          # Implement your code to read daily soil temperature input date for global regional simulations (in K)
-          # The dimension of the input should be [lon, lat, hour].
+          filename = custom_soil_temperature_file(paste0(YYYY, MM, DD))
+          nc = nc_open(filename)
+          for (soil_var in names(custom_soil_temperature_vars)) {
+             assign(x = soil_var, value = ncvar_get(nc, custom_soil_temperature_vars[[soil_var]]))
+          }
+          nc_close(nc)
        }
       
       

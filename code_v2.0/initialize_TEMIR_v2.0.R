@@ -72,6 +72,9 @@ file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/find_hist_stat.R')
 # Copy input script for the crop model (only if biogeochem_flag == TRUE)
 if (biogeochem_flag) file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_crop_extension.R'), to = sim_dir)
 
+# Copy configuration for prepared user-provided meteorological maps
+file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/settings_custom_met_inputs.R'), to = sim_dir)
+
 # Copy input script for using site observation data to drive TEMIR
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/settings_1site_inputs.R'), to = sim_dir)
 

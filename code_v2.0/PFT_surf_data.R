@@ -527,11 +527,13 @@ for (i in 1:length(LON_CLM)) {
 # # They are very similar anyway...
 
 ################################################################################
-### Surface invariant fields from GEOS-FP or MERRA2 default ncdf file:
+### Surface invariant fields from the selected meteorological map source:
 ################################################################################
 
 # GEOS-FP or MERRA2 should have the same resolution as current model resolution.
-if (met_name == 'GEOSFP') {
+if (met_name == 'CUSTOM') {
+   filename = custom_static_file
+} else if (met_name == 'GEOSFP') {
    filename = paste0(met_data_dir, 'GEOS_FP/2011/01/', met_name, '.20110101.CN.2x25.nc')
 } else if (met_name == 'MERRA2') {
    filename = paste0(met_data_dir, 'MERRA2/2015/01/', met_name, '.20150101.CN.2x25.nc4')
@@ -539,22 +541,25 @@ if (met_name == 'GEOSFP') {
    stop('met_name specified is not available!')
 }
 
-print(paste0('Loading invariant ', met_name, ' surface fields from ', met_data_dir, '...'), quote=FALSE)
+print(paste0('Loading invariant ', met_name, ' surface fields from ', filename, '...'), quote=FALSE)
 
 nc = nc_open(filename)
-# Dimensions:
-lon_met = ncvar_get(nc, 'lon')
-lat_met = ncvar_get(nc, 'lat')
-# Fraction of lake in grid cell (0-1):
-FRLAKE = ncvar_get(nc, 'FRLAKE')
-# Fraction of land in grid cell (0-1):
-FRLAND = ncvar_get(nc, 'FRLAND')
-# Fraction of land ice in grid cell (0-1):
-FRLANDIC = ncvar_get(nc, 'FRLANDIC')
-# Fraction of ocean in grid cell (0-1):
-FROCEAN = ncvar_get(nc, 'FROCEAN')
-# Surface geopotential (m^2 s^-2):
-PHIS = ncvar_get(nc, 'PHIS')
+if (met_name == 'CUSTOM') {
+   lon_met = ncvar_get(nc, custom_static_vars[['lon']])
+   lat_met = ncvar_get(nc, custom_static_vars[['lat']])
+   FRLAND = ncvar_get(nc, custom_static_vars[['FRLAND']])
+   PHIS = ncvar_get(nc, custom_static_vars[['PHIS']])
+} else {
+   lon_met = ncvar_get(nc, 'lon')
+   lat_met = ncvar_get(nc, 'lat')
+   # Fraction of lake, land, land ice and ocean in grid cell (0-1):
+   FRLAKE = ncvar_get(nc, 'FRLAKE')
+   FRLAND = ncvar_get(nc, 'FRLAND')
+   FRLANDIC = ncvar_get(nc, 'FRLANDIC')
+   FROCEAN = ncvar_get(nc, 'FROCEAN')
+   # Surface geopotential (m^2 s^-2):
+   PHIS = ncvar_get(nc, 'PHIS')
+}
 nc_close(nc)
 
 # Check if resolution of meteorological fields (GEOS-FP or MERRA2) matches that of TEMIR model:
@@ -579,8 +584,9 @@ print(paste0('Latitudes from ', as.character(head(lat, 1)), ' to ', as.character
 
 # Regrid surface data to match with met field resolution:
 
-subfn = 'surf_data_regrid_2000.RData'
-filename = paste0(processed_surf_data_dir, subfn)
+filename = f_grid_cache_path(processed_surf_data_dir, 'surf_data_regrid_2000', lon, lat)
+f_reuse_legacy_grid_cache(file.path(processed_surf_data_dir, 'surf_data_regrid_2000.RData'),
+                          filename, lon, lat)
 
 if (!file.exists(filename)) {
    
@@ -624,19 +630,19 @@ if (!file.exists(filename)) {
    theta_sat_bulk_top = sp.regrid(spdata=zero.to.NaN(THETA_SAT_BULK_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    theta_sat_bulk_top = NaN.to.zero(theta_sat_bulk_top)
    # Clapp and Homberger parameter in top soil layer:
-   b_psi_bulk_top = sp.regrid(spdata=zero.to.NaN(B_PSI_BULK_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon_met, lat.out=lat_met)
+   b_psi_bulk_top = sp.regrid(spdata=zero.to.NaN(B_PSI_BULK_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    b_psi_bulk_top = NaN.to.zero(b_psi_bulk_top)
    # Saturated soil matric potential in top soil layer (mm):
-   psi_sat_bulk_top = -sp.regrid(spdata=zero.to.NaN(-PSI_SAT_BULK_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon_met, lat.out=lat_met)
+   psi_sat_bulk_top = -sp.regrid(spdata=zero.to.NaN(-PSI_SAT_BULK_TOP), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    psi_sat_bulk_top = NaN.to.zero(psi_sat_bulk_top)
    # Saturated volumetric water content bottom soil layer (0-1):
    theta_sat_bulk_bottom = sp.regrid(spdata=zero.to.NaN(THETA_SAT_BULK_BOTTOM), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    theta_sat_bulk_bottom = NaN.to.zero(theta_sat_bulk_bottom)
    # Clapp and Homberger parameter in bottom soil layer:
-   b_psi_bulk_bottom = sp.regrid(spdata=zero.to.NaN(B_PSI_BULK_BOTTOM), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon_met, lat.out=lat_met)
+   b_psi_bulk_bottom = sp.regrid(spdata=zero.to.NaN(B_PSI_BULK_BOTTOM), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    b_psi_bulk_bottom = NaN.to.zero(b_psi_bulk_bottom)
    # Saturated soil matric potential in bottom soil layer (mm):
-   psi_sat_bulk_bottom = -sp.regrid(spdata=zero.to.NaN(-PSI_SAT_BULK_BOTTOM), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon_met, lat.out=lat_met)
+   psi_sat_bulk_bottom = -sp.regrid(spdata=zero.to.NaN(-PSI_SAT_BULK_BOTTOM), lon.in=LON_CLM, lat.in=LAT_CLM, lon.out=lon, lat.out=lat)
    psi_sat_bulk_bottom = NaN.to.zero(psi_sat_bulk_bottom)
    # Soil albedo:
    # 3rd dim = [dry/vis, dry/nir, saturated/vis, saturated/nir]
@@ -652,10 +658,8 @@ if (!file.exists(filename)) {
    save(list=c('LAI_mon_PFT', 'SAI_mon_PFT', 'PFT_frac', 'theta_sat_bulk', 'b_psi_bulk', 'psi_sat_bulk', 'theta_sat_bulk_top', 'b_psi_bulk_top', 'psi_sat_bulk_top', 'theta_sat_bulk_bottom', 'b_psi_bulk_bottom', 'psi_sat_bulk_bottom', 'soil_color', 'soil_albedo', 'grid_area', 'lon', 'lat', 'pftname', 'pftnum', 'exist_regrid'), file=filename)
    
 } else {
-   if (length(ls(pattern='exist_regrid')) == 0) {
-      print('Loading regridded surface data...', quote=FALSE)
-      load(filename)
-   }
+   print('Loading regridded surface data...', quote=FALSE)
+   f_load_grid_cache(filename, lon, lat)
 }
 
 cat('\n')
@@ -860,8 +864,11 @@ if (LAI_data_flag) {
       
       for (iyear in seq_along(LAI_required_years)) {
          
-         output_subfn = paste0('daily_monthly_LAI_data_', as.character(LAI_required_years[iyear]), '.RData')
-         output_filename = paste0(processed_surf_data_dir, output_subfn)
+         output_filename = f_grid_cache_path(processed_surf_data_dir,
+             paste0('daily_monthly_LAI_data_', LAI_required_years[iyear]), lon, lat)
+         f_reuse_legacy_grid_cache(file.path(processed_surf_data_dir,
+             paste0('daily_monthly_LAI_data_', LAI_required_years[iyear], '.RData')),
+             output_filename, lon, lat)
          
          # Check if scaled LAI is already available:
          if (!file.exists(output_filename)) {
@@ -938,10 +945,10 @@ if (LAI_data_flag) {
       }
       
       # Load the interpolated daily LAI and SAI values for the first simulation year:
-      output_subfn = paste0('daily_monthly_LAI_data_', as.character(LAI_used_years[1]), '.RData')
-      output_filename = paste0(processed_surf_data_dir, output_subfn)
+      output_filename = f_grid_cache_path(processed_surf_data_dir,
+          paste0('daily_monthly_LAI_data_', LAI_used_years[1]), lon, lat)
       print(paste0('Loading existing daily LAI and SAI data for year ', as.character(LAI_used_years[1]), '...'), quote=FALSE)
-      load(output_filename)
+      f_load_grid_cache(output_filename, lon, lat)
       
       exist_LAI_data = TRUE
       
@@ -957,8 +964,9 @@ if (!exist_LAI_data && !biogeochem_flag) {
    
    print("No user-defined LAI data are available so default CLM 2000 LAI and SAI data are used.", quote=FALSE)
    
-   subfn = 'daily_LAI_CLM_2000.RData'
-   filename = paste0(processed_surf_data_dir, subfn)
+   filename = f_grid_cache_path(processed_surf_data_dir, 'daily_LAI_CLM_2000', lon, lat)
+   f_reuse_legacy_grid_cache(file.path(processed_surf_data_dir, 'daily_LAI_CLM_2000.RData'),
+                             filename, lon, lat)
    
    if (!file.exists(filename)) {
       
@@ -989,7 +997,7 @@ if (!exist_LAI_data && !biogeochem_flag) {
    } else {
       if (!exists('LAI_day_PFT') | !exists('SAI_day_PFT')) {
          print('Loading daily LAI and SAI data...', quote=FALSE)
-         load(filename)
+         f_load_grid_cache(filename, lon, lat)
       }
    }
 }

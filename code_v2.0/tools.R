@@ -487,6 +487,65 @@ plot.field = function(spdata, lon.map, lat.map, type=NULL, same=FALSE, zlim=NULL
 ################################################################################
 
 ################################################################################
+### Grid-specific cache helpers
+################################################################################
+
+f_grid_cache_path = function(directory, stem, lon, lat) {
+   # Include the complete coordinate vectors: spacing alone does not identify
+   # a grid if its origin or extent changes.
+   grid_file = tempfile('temir_grid_')
+   on.exit(unlink(grid_file))
+   saveRDS(list(lon = as.numeric(lon), lat = as.numeric(lat)), grid_file,
+           version = 2, compress = FALSE)
+   grid_id = substr(unname(tools::md5sum(grid_file)), 1, 12)
+   spacing = function(x) gsub('\\.', 'p', formatC(abs(x[2] - x[1]), format = 'f', digits = 4))
+   file.path(directory, paste0(stem, '_lat', spacing(lat), '_lon', spacing(lon),
+                               '_', grid_id, '.RData'))
+}
+
+f_load_grid_cache = function(filename, lon, lat, envir = parent.frame()) {
+   cache = new.env(parent = emptyenv())
+   load(filename, envir = cache)
+   if (!exists('lon', envir = cache, inherits = FALSE) ||
+       !exists('lat', envir = cache, inherits = FALSE) ||
+       !identical(as.numeric(cache$lon), as.numeric(lon)) ||
+       !identical(as.numeric(cache$lat), as.numeric(lat))) {
+      stop(paste0('Cached grid does not match configured lon/lat: ', filename))
+   }
+   for (name in setdiff(ls(cache), c('lon', 'lat'))) {
+      assign(name, get(name, envir = cache), envir = envir)
+   }
+   invisible(NULL)
+}
+
+f_reuse_legacy_grid_cache = function(legacy_file, grid_file, lon, lat) {
+   if (file.exists(grid_file) || !file.exists(legacy_file)) return(invisible(FALSE))
+   cache = new.env(parent = emptyenv())
+   load(legacy_file, envir = cache)
+   if (!exists('lon', envir = cache, inherits = FALSE) ||
+       !exists('lat', envir = cache, inherits = FALSE) ||
+       !identical(as.numeric(cache$lon), as.numeric(lon)) ||
+       !identical(as.numeric(cache$lat), as.numeric(lat))) return(invisible(FALSE))
+   if (!file.copy(legacy_file, grid_file)) stop(paste0('Could not copy cache to ', grid_file))
+   invisible(TRUE)
+}
+
+f_custom_met_columns = function(TEMIR_names, source_vars, wind_input, pressure_input) {
+   source_names = as.character(source_vars[TEMIR_names])
+   if (pressure_input == 'surface') {
+      source_names[TEMIR_names == 'SLP'] = NA
+   } else {
+      source_names[TEMIR_names == 'PS'] = NA
+   }
+   if (wind_input == 'speed') {
+      source_names[TEMIR_names %in% c('U10M', 'V10M')] = NA
+   } else {
+      source_names[TEMIR_names == 'WS'] = NA
+   }
+   source_names
+}
+
+################################################################################
 ### Functions for reading meteorological fields (MERRA2 & GEOS-FP)
 ################################################################################
 

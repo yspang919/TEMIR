@@ -44,12 +44,13 @@ processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
 ################################################################################
 
 # Choice of meteorological fields:
-# It should be either "GEOSFP" or "MERRA2".
+# It should be "GEOSFP", "MERRA2", or "CUSTOM".
+# CUSTOM reads prepared meteorological maps configured in settings_custom_met_inputs.R.
 # met_name = 'GEOSFP'
 met_name = 'MERRA2'
 
 # For single site simulations, users could provide site measurements data (e.g., FLUXNET2015, other site-measurements) stored in .RData to drive TEMIR instead of mapped inputs (e.g., ozone, meteorology).
-# Meteorological maps (MERRA2, GEOS-FP) are required regardless for a complete set of required model variables.
+# A complete meteorological map source is required regardless of site observations.
 # Refer to 'settings_1site_inputs.R' for additional settings.
 use_site_obs_flag = TRUE
 
@@ -57,7 +58,8 @@ use_site_obs_flag = TRUE
 # Time step (hr):
 dt_hr = 1
 # Global longitude and latitude grid:
-# It should always match the resolution of input meteorological fields (which are set in this file and in "PFT_surf_data.R").
+# Coordinates must match the prepared meteorological fields exactly. Land surface
+# and prescribed LAI data are regridded to these coordinates and cached by grid.
 dlon = 2.5
 lon = seq(-180, 177.5, by=dlon)
 dlat = 2.0

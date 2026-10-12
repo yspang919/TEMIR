@@ -90,11 +90,9 @@ f_simulate_ij = function(IJ) {
     
     
     if (biogeochem_flag) {
-        if (T_soil_source == 'MERRA2') {
+        if (T_soil_source %in% c('MERRA2', 'custom')) {
             # Currently only using the shallowest layer of TSOIL for calculating mean soil temperature
             T_soil_daily =  mean(TSOIL1[i,j,], na.rm = TRUE) 
-        } else if (T_soil_source == 'custom') {
-            stop('Implement your own method to calculate mean soil temperature with custom Tsoil map.')
         }
     }
     
@@ -468,7 +466,7 @@ f_simulate_ij = function(IJ) {
                 # The zero-plane displacement height where wind speed is extrapolated to zero is Z_disp + Z_0m. In what follows, "displacement height" means the zero-plane displacement height.
                 
                 # Sea-level pressure (Pa):
-                slp = SLP[i,j,h]
+                if (met_name != 'CUSTOM' || custom_pressure_input == 'sea_level') slp = SLP[i,j,h]
                 # Atmospheric temperature at 2 m above displacement height (K):
                 T_2m = T2M[i,j,h]
                 # Atmospheric temperature at 10 m above displacement height (K):
@@ -478,8 +476,10 @@ f_simulate_ij = function(IJ) {
                 # # Specific humidity at 10 m above displacement height (kg kg^-1): # Not included in GEOS-Chem met fields
                 # q_10m = QV10M[i,j,h]
                 # Wind speed at 10 m above displacement height (m s^-1):
-                if (single_site_flag && use_site_obs_flag && (FLUXNET_flag || (using_site_met_flag &&replaced_map_WS_flag))) {
+                if (single_site_flag && use_site_obs_flag && (FLUXNET_flag || (using_site_met_flag && replaced_map_WS_flag))) {
                     if (FLUXNET_flag) {u_10m = WS[i,j,h]} else {u_10m = WS[h]}
+                } else if (met_name == 'CUSTOM' && custom_wind_input == 'speed') {
+                    u_10m = WS[i,j,h]
                 } else {
                     # Derived from met. field
                     u_10m = sqrt(U10M[i,j,h]^2 + V10M[i,j,h]^2)
@@ -517,6 +517,11 @@ f_simulate_ij = function(IJ) {
                     } else {
                         P_surf = ATMP[h]; P_disp = ATMP[h]; P_2m = ATMP[h]; P_10m = ATMP[h] 
                     }
+                } else if (met_name == 'CUSTOM' && custom_pressure_input == 'surface') {
+                    P_surf = PS[i,j,h]
+                    P_disp = P_surf*exp(-(Z_disp + Z_0m)/Z_scale)
+                    P_2m = P_surf*exp(-(Z_disp + Z_0m + 2)/Z_scale)
+                    P_10m = P_surf*exp(-(Z_disp + Z_0m + 10)/Z_scale)
                 } else {
                     P_surf = slp*exp(-Z_surf/Z_scale)
                     P_disp = slp*exp(-(Z_surf + Z_disp + Z_0m)/Z_scale)
@@ -781,7 +786,8 @@ f_simulate_ij = function(IJ) {
                         if (T_soil_source == 'MERRA2') {
                             T_soil_array_input =  c(TSOIL1[i,j,h], TSOIL2[i,j,h], TSOIL3[i,j,h], TSOIL4[i,j,h], TSOIL5[i,j,h])
                         } else if (T_soil_source == 'custom') {
-                            # Implement by the user....
+                            T_soil_array_input = vapply(names(custom_soil_temperature_vars),
+                                function(soil_var) get(soil_var)[i,j,h], numeric(1))
                         }
                     }
                 }

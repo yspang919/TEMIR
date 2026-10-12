@@ -42,12 +42,12 @@ For a detailed description of the required input folders and download guidance, 
 In general, a TEMIR simulation may require the following input folders beneath `TEMIR_inputs/`:
 
 **Mandatory for all simulations**
-- `met_data/`: MERRA-2 or GEOS-FP meteorological forcing
+- `met_data/`: MERRA-2, GEOS-FP, or prepared custom meteorological forcing
 - `surf_data/`: CLM land surface map and plant functional type properties
 - `processed_surf_data/`: processed land surface files generated from the original surface data
 
 **Additional inputs for crop carbon-vegetation simulations**
-- `soilT_map/`: MERRA-2 soil temperature maps
+- `soilT_map/`: MERRA-2 soil temperature maps when the crop module uses MERRA-2 soil temperature; custom forcing can provide these layers in its prepared files
 - `initial_data/`: initialization files for starting a simulation
 - `crop_calender/`: crop planting and harvesting calendars
 - `GDDmat_maps/`: crop growing degree day requirement for maturity
@@ -63,8 +63,17 @@ In general, a TEMIR simulation may require the following input folders beneath `
 #### MERRA-2 and GEOS-FP meteorological fields
 Meteorological forcing can be downloaded by following the tutorial on the [GEOS-Chem website](http://wiki.seas.harvard.edu/geos-chem/index.php/Downloading_GEOS-Chem_data_directories). TEMIR uses the A1 meteorological fields as the default forcing input.
 
+#### Prepared custom meteorological maps
+Set `met_name = 'CUSTOM'` in `input_TEMIR.R` and edit the copied `settings_custom_met_inputs.R` in the simulation directory. The latter defines the daily NetCDF filename, variable names, static map filename, and whether wind is supplied as speed or components and pressure as surface or sea-level pressure. Custom values must be converted to the TEMIR units listed in `execution_v2.0.R` **before** the simulation. The model does not convert custom units or automatically fill missing map variables from MERRA-2 or GEOS-FP.
+
+Daily arrays must be ordered `[longitude, latitude, hour]`, with 24 UTC hourly averages on the configured `lon` and `lat` grid. The default naming example is `met_data/GEOS_2x2.5/CUSTOM/CUSTOM.YYYYMMDD.nc`; change `custom_met_dir` and `custom_met_file` to suit prepared data. The static NetCDF file supplies `lon`, `lat`, `FRLAND` (non-glacial land fraction, 0-1), and `PHIS` (surface geopotential, m² s⁻²). The default daily mapping requires cloud fraction, top and root-zone soil wetness, 2 m and 10 m temperature, sensible and latent heat flux, direct and diffuse PAR, downward shortwave radiation, total precipitation and snowfall, snow depth, evaporation, 2 m specific humidity, friction velocity, and momentum roughness length. It additionally reads either wind speed or both wind components, and either surface or sea-level pressure. See `settings_custom_met_inputs.R` for names and `execution_v2.0.R` for units.
+
+For crop/biogeochemistry runs, also supply soil-temperature layers in the prepared daily file or set `custom_soil_temperature_file` to another daily NetCDF file. Configure their names and layer-bottom depths in `settings_custom_met_inputs.R`. Prescribed PAR must include direct and diffuse components; split other radiation products during input preparation.
+
+Land surface and prescribed LAI maps are regridded to the model grid and cached under grid-specific filenames. A matching legacy 2° × 2.5° cache is reused automatically. Custom meteorological and soil-temperature maps themselves are not regridded by TEMIR. Runs at other resolutions, especially with the crop module's initial-condition and calendar maps, still need verification against actual input files.
+
 #### MERRA-2 soil temperature fields
-Soil temperature is required for carbon-vegetation simulations, including crop simulations. Data can be downloaded from the [NASA MERRA-2 repository](https://disc.gsfc.nasa.gov/datasets?project=MERRA-2). The required variables are `TSOIL1` to `TSOIL5` from the hourly-average land surface diagnostic files (`lnd_Nx`).
+Soil temperature is required for carbon-vegetation simulations, including crop simulations. When using MERRA-2 soil temperature, data can be downloaded from the [NASA MERRA-2 repository](https://disc.gsfc.nasa.gov/datasets?project=MERRA-2). The required variables are `TSOIL1` to `TSOIL5` from the hourly-average land surface diagnostic files (`lnd_Nx`). Custom forcing can instead supply prepared soil-temperature layers as described above.
 
 #### GEOS-Chem-simulated hourly ozone concentrations
 This is optional and should be stored under `TEMIR_inputs/o3_input/` if used. Users may prepare their own ozone map files or obtain suitable ozone fields separately.
