@@ -14,7 +14,7 @@ After downloading the Zenodo archive, unzip its contents so that the folders are
 
 **Inputs folders TEMIR v2.0**
 - `initial_data/`: CLM4.5 initial data for initializing a simulation
-- `met_data/`: MERRA-2 global meteorological forcing for the example test case (2010-04-01 to 2010-09-30); prepared custom NetCDF maps may also be placed here
+- `met_data/`: MERRA-2 global meteorological forcing for the example test case (2010-04-01 to 2010-09-30), including the 2015 invariant CN file; prepared custom daily NetCDF maps may also be placed here
 - `soilT_map/`: MERRA-2 five-layer soil temperature data for the example test case
 - `surf_data/`: raw CLM land surface data and PFT-specific biochemical and biophysical parameters
 - `processed_surf_data/`: processed land surface data used by TEMIR simulations

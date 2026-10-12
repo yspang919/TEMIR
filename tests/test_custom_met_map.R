@@ -36,6 +36,7 @@ stopifnot(config$T_soil_source == 'custom')
 stopifnot(identical(names(config$custom_soil_temperature_vars),
                     paste0('TSOIL', 1:5)))
 stopifnot(length(config$map_TS_meas_depth) == 5)
+stopifnot(grepl('MERRA2.20150101.CN.2x25.nc4$', config$custom_static_file))
 
 config_without_crop = new.env(parent = globalenv())
 config_without_crop$met_data_dir = test_dir
@@ -54,6 +55,14 @@ stopifnot(identical(unname(sea_level_components[c(3, 4, 6)]),
                     c('U10M', 'V10M', 'SLP')))
 stopifnot(all(is.na(sea_level_components[c(2, 5)])))
 stopifnot(identical(unname(surface_speed[c(7, 8)]), c('PARDR', 'PARDF')))
+
+# The invariant MERRA grid can be coarser than the custom model grid.
+coarse_static = matrix(c(0, 1, 1, 0), nrow = 2)
+fine_static = sp.regrid(coarse_static, lon.in = c(-1, 1), lat.in = c(-1, 1),
+                        lon.out = seq(-1.5, 1.5, by = 1),
+                        lat.out = seq(-1.5, 1.5, by = 1))
+stopifnot(identical(dim(fine_static), c(4L, 4L)))
+stopifnot(all(fine_static >= 0 & fine_static <= 1))
 
 unlink(test_dir, recursive = TRUE)
 cat('Custom map settings and grid caches passed.\n')

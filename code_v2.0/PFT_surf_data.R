@@ -544,23 +544,30 @@ if (met_name == 'CUSTOM') {
 print(paste0('Loading invariant ', met_name, ' surface fields from ', filename, '...'), quote=FALSE)
 
 nc = nc_open(filename)
-if (met_name == 'CUSTOM') {
-   lon_met = ncvar_get(nc, custom_static_vars[['lon']])
-   lat_met = ncvar_get(nc, custom_static_vars[['lat']])
-   FRLAND = ncvar_get(nc, custom_static_vars[['FRLAND']])
-   PHIS = ncvar_get(nc, custom_static_vars[['PHIS']])
-} else {
-   lon_met = ncvar_get(nc, 'lon')
-   lat_met = ncvar_get(nc, 'lat')
-   # Fraction of lake, land, land ice and ocean in grid cell (0-1):
-   FRLAKE = ncvar_get(nc, 'FRLAKE')
-   FRLAND = ncvar_get(nc, 'FRLAND')
-   FRLANDIC = ncvar_get(nc, 'FRLANDIC')
-   FROCEAN = ncvar_get(nc, 'FROCEAN')
-   # Surface geopotential (m^2 s^-2):
-   PHIS = ncvar_get(nc, 'PHIS')
-}
+lon_met = ncvar_get(nc, 'lon')
+lat_met = ncvar_get(nc, 'lat')
+# Fraction of lake, land, land ice and ocean in grid cell (0-1):
+FRLAKE = ncvar_get(nc, 'FRLAKE')
+FRLAND = ncvar_get(nc, 'FRLAND')
+FRLANDIC = ncvar_get(nc, 'FRLANDIC')
+FROCEAN = ncvar_get(nc, 'FROCEAN')
+# Surface geopotential (m^2 s^-2):
+PHIS = ncvar_get(nc, 'PHIS')
 nc_close(nc)
+
+# Custom daily maps are prepared on the model grid. The MERRA-2 invariant
+# fields may still be on their original 2 x 2.5 degree grid.
+if (met_name == 'CUSTOM' &&
+    (!identical(as.numeric(lon_met), as.numeric(lon)) ||
+     !identical(as.numeric(lat_met), as.numeric(lat)))) {
+   print('Regridding MERRA-2 invariant fields to the custom model grid...', quote=FALSE)
+   for (static_name in c('FRLAKE', 'FRLAND', 'FRLANDIC', 'FROCEAN', 'PHIS')) {
+      assign(static_name, sp.regrid(spdata=get(static_name),
+                                    lon.in=lon_met, lat.in=lat_met,
+                                    lon.out=lon, lat.out=lat))
+   }
+   rm(static_name)
+}
 
 # Check if resolution of meteorological fields (GEOS-FP or MERRA2) matches that of TEMIR model:
 # if (!identical(as.numeric(lon_met),as.numeric(lon)) | !identical(head(as.numeric(lat_met),-1)[-1], head(as.numeric(lat),-1)[-1])) stop('Model resolution does not match that of input meteorological data!')

@@ -13,10 +13,11 @@ custom_met_file = function(yyyymmdd) {
    file.path(custom_met_dir, paste0('CUSTOM.', yyyymmdd, '.nc'))
 }
 
-# Static map coordinates must match lon/lat in input_TEMIR.R. FRLAND is the
-# non-glacial land fraction (0-1); PHIS is surface geopotential (m2 s-2).
-custom_static_file = file.path(custom_met_dir, 'static.nc')
-custom_static_vars = c(lon = 'lon', lat = 'lat', FRLAND = 'FRLAND', PHIS = 'PHIS')
+# TEMIR continues to use the MERRA-2 invariant CN file for land fractions and
+# surface geopotential. Its fields are regridded if the model uses another grid.
+# Set this path explicitly if the static MERRA-2 file is stored elsewhere.
+custom_static_file = file.path(met_data_dir, 'MERRA2', '2015', '01',
+                               'MERRA2.20150101.CN.2x25.nc4')
 
 # Select one representation for wind and pressure. The corresponding source
 # variable names below may be changed independently of TEMIR's internal names.
