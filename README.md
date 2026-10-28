@@ -5,9 +5,11 @@ The **Terrestrial Ecosystem Model in R (TEMIR)** is an ecosystem model developed
 
 The default meteorological inputs for TEMIR are from NASA/GMAO [MERRA-2](http://wiki.seas.harvard.edu/geos-chem/index.php/List_of_MERRA-2_met_fields) and [GEOS-FP](http://wiki.seas.harvard.edu/geos-chem/index.php/List_of_GEOS-FP_met_fields) reanalysis products, so that ecosystem simulations are entirely consistent and can be asynchronously coupled with the [GEOS-Chem](http://wiki.seas.harvard.edu/geos-chem/index.php/Main_Page) chemical transport model. Land surface inputs, including plant functional type and soil data, are mainly derived from the [Community Land Model (CLM)](http://www.cesm.ucar.edu/models/clm/) version 4.5, with 24 plant functional types including several crop types. The model is highly customizable, and users may replace the default inputs with their own data. TEMIR can also be run in parallel on multiple cores.
 
-## Version and history (Last update: July 2026)
+## Version and history (Last update: October 2026)
 - 18 Jun 2019, v1.1; base plant-ecophysiological model with ozone dry deposition module
 - 16 Jul 2026, v2.0; crop carbon-vegetation model with support for site-level meteorological, LAI, and ozone inputs for single-site simulations
+
+- 28 Oct 2026, v2.0; support for custom gridded meteorology, PFT fractions, and crop phenology inputs for regional crop simulations
 
 ## Getting started
 The following components are required to run the model. Please refer to the TEMIR v2.0 manual after cloning the repository.
