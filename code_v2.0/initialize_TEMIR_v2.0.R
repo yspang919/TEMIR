@@ -8,9 +8,10 @@
 # version 2.0 (Jul 2026): simulation of staple crops with a vegetation-carbon model
 TEMIR_version = '2.0'
 
-# Set TEMIR directory:
-# TEMIR_dir = 'C:/Users/Document/TEMIR/'
-TEMIR_dir = "C:/Users/jacky/Documents/Github/TEMIR/"
+# Run this script from the TEMIR repository root, or set TEMIR_DIR to its path.
+TEMIR_root = Sys.getenv('TEMIR_DIR', unset = '')
+if (!nzchar(TEMIR_root)) TEMIR_root = getwd()
+TEMIR_dir = paste0(normalizePath(TEMIR_root, winslash = '/', mustWork = TRUE), '/')
 # Set simulation parent directory:
 # Users can specify their customized parent directory for their simulations here.
 sim_parent_dir = TEMIR_dir

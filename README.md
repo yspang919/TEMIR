@@ -24,6 +24,12 @@ cd TEMIR
 git switch v2.0
 ```
 
+These commands select the original v2.0 single-site example. The `master`
+branch also supports prepared regional meteorology and prescribed crop maps.
+Run its initializer from the repository root, or set `TEMIR_DIR` to the
+repository path when using another directory layout. The map settings in a
+new simulation case must be adjusted to the user's input files.
+
 #### Required input data
 This GitHub repository does **not** contain the large input datasets required to run TEMIR. In practice, the GitHub repository mainly contains the model code and description files.
 

@@ -7,8 +7,8 @@
 
 # R library location
 # If it is not provided (NA), packages will be installed and read from the default R library path.
-# r_library_loc = 'C:/Users/Documents/TEMIR/lib/'
-r_library_loc = 'C:/Program Files/R/R-4.5.1/library'
+# Set a writable library path if needed; NA uses R's default library paths.
+r_library_loc = NA_character_
 
 # Run in cluster environment (i.e., not on personal computer)?
 cluster_flag = FALSE
@@ -29,21 +29,20 @@ debug_flag = FALSE
 
 # Required directories:
 
-# Set TEMIR directory:
-# TEMIR_dir = path.expand('~/Documents/TEMIR/')
-TEMIR_dir = path.expand("C:/Users/jacky/Documents/Github/TEMIR/")
+# Initialized cases live under TEMIR_run/<case>/ by default. Set TEMIR_DIR
+# when running a case elsewhere or using another TEMIR checkout.
+TEMIR_root = Sys.getenv('TEMIR_DIR', unset = '')
+if (!nzchar(TEMIR_root)) TEMIR_root = file.path(getwd(), '..', '..')
+TEMIR_dir = paste0(normalizePath(TEMIR_root, winslash = '/', mustWork = TRUE), '/')
 # Set source code directory:
 code_dir = paste0(TEMIR_dir, 'code_v2.0/')
 # Set meteorological data directory:
-# met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5/')
-met_data_dir = path.expand("G:/My Drive/Angus_FYP/data/ERA5_data/merged_file/")  # Specific for ERA5
+met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5/')
 # Set PFT and surface data directory:
-# surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
-external_TEMIR_inputs_dir = path.expand('C:/Users/jacky/Documents/TEMIR/TEMIR_inputs/')
-surf_data_dir = path.expand(paste0(external_TEMIR_inputs_dir, 'surf_data/clm2/'))
+external_TEMIR_inputs_dir = paste0(TEMIR_dir, 'TEMIR_inputs/')
+surf_data_dir = paste0(external_TEMIR_inputs_dir, 'surf_data/clm2/')
 # Set processed PFT and surface output directory:
-# processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
-processed_surf_data_dir = path.expand(paste0(external_TEMIR_inputs_dir, 'processed_surf_data/'))
+processed_surf_data_dir = paste0(external_TEMIR_inputs_dir, 'processed_surf_data/')
 
 ################################################################################
 ### Model configuration:

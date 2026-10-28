@@ -8,7 +8,7 @@
 # Daily fields must have dimensions [longitude, latitude, hour] in the order
 # configured by lon and lat in input_TEMIR.R, with 24 UTC hourly averages.
 
-custom_met_dir = file.path("G:/My Drive/Angus_FYP/data/ERA5_data/merged_file/")
+custom_met_dir = file.path(sub('/$', '', met_data_dir), 'CUSTOM')
 custom_met_file = function(yyyymmdd) {
    file.path(custom_met_dir,
              substr(yyyymmdd, 1, 4),
@@ -19,7 +19,8 @@ custom_met_file = function(yyyymmdd) {
 # TEMIR continues to use the MERRA-2 invariant CN file for land fractions and
 # surface geopotential. Its fields are regridded if the model uses another grid.
 # Set this path explicitly if the static MERRA-2 file is stored elsewhere.
-custom_static_file = file.path("G:/My Drive/Angus_FYP/data/MERRA2_invariant/2015/01/MERRA2.20150101.CN.2x25.nc4")
+custom_static_file = file.path(sub('/$', '', met_data_dir), 'MERRA2', '2015', '01',
+                               'MERRA2.20150101.CN.2x25.nc4')
 
 # Select one representation for wind and pressure. The corresponding source
 # variable names below may be changed independently of TEMIR's internal names.
