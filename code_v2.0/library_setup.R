@@ -20,13 +20,22 @@ if (!is.na(r_library_loc) &&
     r_library_loc = normalizePath(r_library_loc, winslash = '/', mustWork = FALSE)
     .libPaths(c(r_library_loc, .libPaths()))
     install_lib = r_library_loc
-    print(paste0('Loading / installing R packages at user-specified library path: ', r_library_loc), quote = FALSE)
+    print(paste0('Using R package library path: ', r_library_loc), quote = FALSE)
 } else {
     install_lib = NULL
-    print(paste0('Loading / installing R packages at default R library path: ', .libPaths()[1]), quote = FALSE)
+    print(paste0('Using default R package library path: ', .libPaths()[1]), quote = FALSE)
 }
 
 cran_repo = 'https://cloud.r-project.org'
+# Batch jobs must use an environment prepared before submission. Installing
+# packages here can race other jobs and modify the running R library.
+if (!exists('r_install_packages', inherits = FALSE)) {
+    r_install_packages = !isTRUE(cluster_flag)
+}
+if (!is.logical(r_install_packages) || length(r_install_packages) != 1L ||
+    is.na(r_install_packages)) {
+    stop('r_install_packages must be TRUE or FALSE')
+}
 
 # Packages bundled with / recommended by R.
 # TEMIR loads them but does not try to install a standalone CRAN copy.
@@ -37,7 +46,7 @@ base_package_vec = c('parallel')
 package_df = data.frame(
     package = c('dotCall64', 'stringr', 'abind', 'ncdf4', 'filesstrings',
                 'spam', 'maps', 'fields', 'lubridate', 'dplyr', 'readxl'),
-    version = c('1.2', '1.5.1', '1.4.8', '1.24', '3.4.0', '2.11.4', '3.4.3', '17.3', '1.94', '1.1.4', '1.4.5'),
+    version = c('1.2', '1.5.1', '1.4.8', '1.24', '3.4.0', '2.11.4', '3.4.3', '17.3', '1.9.4', '1.1.4', '1.4.5'),
     stringsAsFactors = FALSE
 )
 
@@ -48,14 +57,16 @@ for (pkg in base_package_vec) {
 
 # Install "remotes" only if exact version pinning is requested.
 need_remotes = FALSE
-for (i in 1:nrow(package_df)) {
-    pkg = package_df$package[i]
-    target_ver = package_df$version[i]
-    pkg_installed = requireNamespace(pkg, quietly = TRUE)
-    if (!is.na(target_ver)) {
-        if (!pkg_installed || as.character(packageVersion(pkg)) != target_ver) {
-            need_remotes = TRUE
-            break
+if (r_install_packages) {
+    for (i in 1:nrow(package_df)) {
+        pkg = package_df$package[i]
+        target_ver = package_df$version[i]
+        pkg_installed = requireNamespace(pkg, quietly = TRUE)
+        if (!is.na(target_ver)) {
+            if (!pkg_installed || as.character(packageVersion(pkg)) != target_ver) {
+                need_remotes = TRUE
+                break
+            }
         }
     }
 }
@@ -68,27 +79,47 @@ if (need_remotes && !requireNamespace('remotes', quietly = TRUE)) {
 for (i in 1:nrow(package_df)) {
     pkg = package_df$package[i]
     target_ver = package_df$version[i]
+    if (!r_install_packages) {
+        tryCatch(
+            suppressPackageStartupMessages(library(pkg, character.only = TRUE)),
+            error = function(e) stop(
+                'Cannot load required package ', pkg, ' from ',
+                paste(.libPaths(), collapse = ', '), ': ', conditionMessage(e),
+                '. Prepare the R environment before submitting the job.',
+                call. = FALSE
+            )
+        )
+        if (!is.na(target_ver) && as.character(packageVersion(pkg)) != target_ver) {
+            message('Using ', pkg, ' ', as.character(packageVersion(pkg)),
+                    ' (TEMIR was tested with ', target_ver, ')')
+        }
+        next
+    }
     pkg_installed = requireNamespace(pkg, quietly = TRUE)
 
     if (!pkg_installed) {
         if (is.na(target_ver)) {
-            install.packages(pkg, repos = cran_repo, lib = install_lib, dependencies = TRUE)
+            install.packages(pkg, repos = cran_repo, lib = install_lib,
+                             dependencies = c('Depends', 'Imports', 'LinkingTo'))
         } else {
             remotes::install_version(package = pkg, version = target_ver,
                                      repos = cran_repo, lib = install_lib,
-                                     dependencies = TRUE, upgrade = 'never')
+                                     dependencies = c('Depends', 'Imports', 'LinkingTo'),
+                                     upgrade = 'never')
         }
     } else if (!is.na(target_ver) && as.character(packageVersion(pkg)) != target_ver) {
         remotes::install_version(package = pkg, version = target_ver,
                                  repos = cran_repo, lib = install_lib,
-                                 dependencies = TRUE, upgrade = 'never')
+                                 dependencies = c('Depends', 'Imports', 'LinkingTo'),
+                                 upgrade = 'never')
     }
 
     suppressPackageStartupMessages(library(pkg, character.only = TRUE))
 }
 
 rm(base_package_vec, package_df, cran_repo, need_remotes, i, install_lib, pkg,
-   pkg_installed, target_ver)
+   target_ver)
+if (exists('pkg_installed', inherits = FALSE)) rm(pkg_installed)
 
 ################################################################################
 ### End of package setup

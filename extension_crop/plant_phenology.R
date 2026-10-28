@@ -4,7 +4,6 @@
 
 # TODO
 # Reading in some of the CLM-planting parameters when the scheme is selected, possible? 
-# Reading in Sack GDDmat in a more elegant way? Having multiple similar function arguments is not a good way.........
 # Add a flag indicates crop is harvested due to the growing season is too long? When this happen, LAI and crop yield are very strange... This could help diagnosis
 
 f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
@@ -13,9 +12,11 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                             GDD_T2m, GDD_Tsoil, GDDmat, GDDrepr, GDDemer, 
                             crop_living_flag, crop_planting_flag, leaf_emer_flag, grain_filling_flag, harvesting_flag,
                             prescribed_planting_date_readin = NULL, planting_jday, grain_filling_jday, harvest_jday, day_since_crop_senescence, 
-                            GDD0_20yr = NULL, GDD8_20yr = NULL, GDD10_20yr = NULL, GDDmat_M = NULL, GDDmat_S = NULL, GDDmat_SW = NULL, GDDmat_WW = NULL,
+                            GDD0_20yr = NULL, GDD8_20yr = NULL, GDD10_20yr = NULL,
+                            GDDmat_map_value = NA_real_, GDDrepr_map_value = NA_real_, GDDemer_map_value = NA_real_,
                             hybgdd, GDD_baseT, GDD_maxIncrease, max_growing_season_length, leaf_longevity, T_plant_req, T_min_plant_req, repr_GDDfrac, emer_GDDfrac,
-                            prescribed_min_plant_jday, prescribed_max_plant_jday, at_NH_flag){
+                            prescribed_min_plant_jday, prescribed_max_plant_jday, at_NH_flag,
+                            diagnostic_location = NULL){
     
     day_per_year = if (leap) 366 else 365 
     
@@ -53,7 +54,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
     # Crop planting
     if (!crop_living_flag && !crop_planting_flag) {
         if (any(crop_planting_date_method == c('prescribed-map','prescribed-site'))) {
-            if (current_jday == if(is.na(prescribed_planting_date)) prescribed_planting_date_readin else prescribed_planting_date) {
+            if (current_jday == prescribed_planting_date_readin) {
                 crop_planting_flag = T; crop_living_flag = T; planting_jday = current_jday 
                 seed_C_to_leaf_C = emergence_carbon_to_leaf
                 # print(paste0("[crop_phenology] Crop is planted on ", current_date))
@@ -89,10 +90,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                 # 'prescribed_GDD_mat' is an input at 'input_TEMIR_crop_extension.R'
                 GDDmat = prescribed_GDDmat  # prescribed_GDD_mat??
             } else if (GDDmat_method == 'prescribed-map') {
-                if (is_maize)  GDDmat = GDDmat_M
-                if (is_springwheat) GDDmat = GDDmat_SW
-                if (is_winterwheat) GDDmat = GDDmat_WW
-                if (is_soybean) GDDmat = GDDmat_S
+                GDDmat = GDDmat_map_value
             } else if (GDDmat_method == 'CLM4.5') {
                 if (is_maize) GDDmat = max(950, min(GDD8_20yr * 0.85, hybgdd))
                 if (is_springwheat) GDDmat = min(GDD0_20yr, hybgdd)
@@ -103,7 +101,12 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
             if (GDDrepr_method == 'prescribed-site') {
                 # It is an input at 'input_TEMIR_crop_extension.R'
                 GDDrepr = prescribed_GDDrepr # prescribed_GDD_repr??
-            } else if (GDDrepr_method == "CLM4.5") {
+            } else if (GDDrepr_method == 'prescribed-map' &&
+                       is.finite(GDDrepr_map_value)) {
+                GDDrepr = GDDrepr_map_value
+            } else if (GDDrepr_method == "CLM4.5" ||
+                       (GDDrepr_method == 'prescribed-map' &&
+                        custom_phenology_optional_fallback[['GDDrepr']] == 'CLM4.5')) {
                 if (is_maize) {
                     maize_maturity_rating = max(73, min(135, (GDDmat + 53.683)/13.882))          # details of this formula can be found in Kucharik (2003), Earth Interactions No.7
                     GDD_repr_factor = -0.002 * (maize_maturity_rating - 73) + 0.65
@@ -112,17 +115,29 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                 } else {
                     GDDrepr = repr_GDDfrac * GDDmat
                 }
+            } else {
+                stop('Missing prescribed-map GDDrepr and fallback is set to error')
             }
             
             if (GDDemer_method == 'prescribed-site') {
                 GDDemer = prescribed_GDDemer # prescribed_GDD_emer??
-            } else if (GDDemer_method == "CLM4.5") {
+            } else if (GDDemer_method == 'prescribed-map' &&
+                       is.finite(GDDemer_map_value)) {
+                GDDemer = GDDemer_map_value
+            } else if (GDDemer_method == "CLM4.5" ||
+                       (GDDemer_method == 'prescribed-map' &&
+                        custom_phenology_optional_fallback[['GDDemer']] == 'CLM4.5')) {
                 GDDemer = emer_GDDfrac * GDDmat
+            } else {
+                stop('Missing prescribed-map GDDemer and fallback is set to error')
             }
             
             # Checking the value of GDDmat, GDDrepr, GDDemer
-            if (GDDmat < GDDrepr || GDDmat < GDDemer || GDDrepr < GDDemer){
-                warning("The values of GDDmat or/and GDDrepr or/and GDDemer might have some problems. 'GDDmat should be greather than GDDrepr, and GDDrepr should be greater than GDDemer'")
+            if (!all(is.finite(c(GDDmat, GDDrepr, GDDemer))) ||
+                GDDemer <= 0 || GDDrepr <= GDDemer || GDDmat <= GDDrepr) {
+                message = 'Crop GDD thresholds must satisfy 0 < GDDemer < GDDrepr < GDDmat'
+                if (any(c(GDDmat_method, GDDrepr_method, GDDemer_method) ==
+                        'prescribed-map')) stop(message) else warning(message)
             }
         } else {
             # Crop is not planted (yet). No need to determine GDD requirements.
@@ -162,13 +177,24 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
         # print(paste0("[crop_phenology] GDDemer = ", signif(GDDemer, 5),"___GDDrepr = ",signif(GDDrepr, 5), "__ GDDmat = ", signif(GDDmat, digits = 4)))
         
         # Harvesting conditions
-        # 1. GDDT2m > GDDmat   OR
+        # 1. GDDT2m >= GDDmat   OR
         # 2. Growing season is too long (prevent crops stay indefinitely)
-        # 3. Temperature is too low that kills crop (not apply to winter wheat), grok AI suggests the limit is ~ -2 Deg.C (will needed to be refined in the future). This is to prevent crop stays indefinitely in late growing stage where GDD does not increase.
-        if (GDD_T2m >= GDDmat || days_since_planting > max_growing_season_length || (!is_winterwheat && T2m < 271.15)) { 
+        if (GDD_T2m >= GDDmat || days_since_planting > max_growing_season_length) {
 
-            if (days_since_planting > max_growing_season_length) {
-                warning(paste0("Crop growing season exceeded ', max_growing_season_length, 'days and crops are forced to be harvested. Either check the value of GDDmat or modifiy the allowed growing season length 'mxmat' in PFT_surf_data.R"))
+            # Maturity takes precedence when more than one condition is met.
+            # The dates remain in daily output, while this warning records why
+            # a crop was harvested before reaching its GDD requirement.
+            if (GDD_T2m < GDDmat) {
+                reasons = c(
+                    if (days_since_planting > max_growing_season_length)
+                        sprintf('growing season exceeded the %g-day limit', max_growing_season_length)
+                )
+                warning(sprintf(
+                    'Crop%s forced to harvest on %s after %g day(s) since planting (DOY %g to %g): %s; GDDT2m %.2f < GDDmat %.2f.',
+                    if (is.null(diagnostic_location)) '' else paste0(' ', diagnostic_location),
+                    current_date, days_since_planting, planting_jday, current_jday,
+                    paste(reasons, collapse = '; '), GDD_T2m, GDDmat
+                ), call. = FALSE)
             }
 
             crop_living_flag = FALSE

@@ -4,7 +4,10 @@
 
 # TODO
 
-# Currently, the length of root_frac_array is longer than T_soil_array by 1 if multilayer soil temperature input is used. Values in root_frac_array is the PFT-specific root fraction between two soil layers (total 6 layers). Values in T_soil_array is the soil temperature at the boundary of two soil layers (total 5 boundaries in MERRA2). Maintenance respirations might be underestimated during the day time and overestimated during night time... (soil temperature is measured at the bottom of a soil layer).
+# Root fractions and soil temperatures have one entry per supplied soil layer.
+# Each layer's temperature is used for the corresponding share of fine roots.
+# A forcing product's layer-average temperature remains an approximation of
+# the temperature experienced by all roots within that layer.
 
 # Future solution 1: estimated the soil temperature at the depth where cummulative root fracation = 50 % for each PFT, then use this temperature to calculate MR. (essentially become a bulk soil layer, easier to implement but may lose some accuracy). The depth where cummulative root fraction = 50% is between 10 - 30cm (between TSOIL1 and TSOIL2, see input_TEMIR_crop_extension.R).
 
@@ -28,6 +31,10 @@ f_maintenance_respiration_fluxes_CLM45 = function(root_frac_array, T_soil_array,
     # Temperature in Degree Celsius is needed for the calculation
     T_2m_degC = T_2M - 273.15
     T_soil_array_degC = T_soil_array - 273.15
+    if (length(root_frac_array) != length(T_soil_array_degC) ||
+        length(T_soil_array_degC) < 1L) {
+        stop('Root fractions and soil temperatures must have the same nonzero number of layers')
+    }
         
     mr_leaf = leaf_N * mr_perN_20C * q10_mr ^ ((T_2m_degC - 20) / 10)
     mr_livestem = livestem_N * mr_perN_20C * q10_mr ^ ((T_2m_degC - 20) / 10)
@@ -41,7 +48,7 @@ f_maintenance_respiration_fluxes_CLM45 = function(root_frac_array, T_soil_array,
     } else {
         # multiple layers of T soil, scale each layer according to the root fraction of each temperature layer
         mr_fineroot_total = 0
-        for (layer in 1:(length(T_soil_array_degC)-1)) {
+        for (layer in seq_along(T_soil_array_degC)) {
             mr_fineroot_layer = (fineroot_N * mr_perN_20C * q10_mr ^ ((T_soil_array_degC[layer] - 20) / 10)) * root_frac_array[layer]
             mr_fineroot_total = mr_fineroot_total + mr_fineroot_layer
         }

@@ -90,7 +90,7 @@ f_simulate_ij = function(IJ) {
     
     
     if (biogeochem_flag) {
-        if (T_soil_source %in% c('MERRA2', 'custom')) {
+        if (T_soil_source %in% c('MERRA2', 'custom-map')) {
             # Currently only using the shallowest layer of TSOIL for calculating mean soil temperature
             T_soil_daily =  mean(TSOIL1[i,j,], na.rm = TRUE) 
         }
@@ -163,7 +163,7 @@ f_simulate_ij = function(IJ) {
             LAI = LAI_day_PFT[i,j,ipft,n_PAI]
         } else {
             # Modelled leaf and stem area index (m^2 m^-2)
-            if (d == 1) {
+            if (d == 1 && !continue_flag) {
                 # Initialize values of LAI and SAI from initial_data for the first day of the simulation
                 LAI = LAI_initial_map[i,j,ipft]
                 SAI = SAI_initial_map[i,j,ipft]
@@ -172,7 +172,7 @@ f_simulate_ij = function(IJ) {
                 prev_date = to.yyyymmdd(from.yyyymmdd(current_date) - 24)
                 # filename = paste0(sim_dir,'temp_data/temp_',prev_date,'/temp_i',i_str,'_j', j_str, '.RData')
                 filename = paste0('temp_data/temp_',prev_date,'/temp_i',i_str,'_j', j_str, '.RData')
-                print(paste0("Loading ", filename))
+                if (single_site_flag) print(paste0("Loading ", filename))
                 load(filename)
                 
                 LAI = tlai_PFT_lasthd_ijd[ipft]
@@ -186,14 +186,27 @@ f_simulate_ij = function(IJ) {
             }
         }
         
-        # Minimum PFT fraction required that a PFT is simulated in grid cell
+        # Custom mapped PFTs run wherever their fraction is positive; other
+        # PFTs retain TEMIR's existing minimum-fraction gate.
+        custom_PFT_frac_mapped = PFT_frac_method == 'custom-map' &&
+                                 ipft %in% custom_PFT_frac_ipft
         PFT_frac_min = if (biogeochem_flag) PFT_frac_threshold else 0.01
+        low_PFT_frac = if (custom_PFT_frac_mapped) {
+            PFT_frac[i,j,ipft] <= 0
+        } else {
+            PFT_frac[i,j,ipft] < PFT_frac_min
+        }
         
-        if ((LAI < 0.01 && !biogeochem_flag) | PFT_frac[i,j,ipft] < PFT_frac_min) {
+        if ((LAI < 0.01 && !biogeochem_flag) | low_PFT_frac) {
             # Too little vegetation. Skip current PFT calculations.
             if (single_site_flag && d == 1) {
                 print(paste0("Skip calculation for ipft = ", ipft, " - ", pftname[ipft], ' % converage at the grid cell = ', signif(PFT_frac[i,j,ipft]*100, digits = 3)))
-                print(paste0('If you want to simulate ', pftname[ipft], ", adjust the variable 'PFT_frac_threshold' in input_TEMIR_crop_extension.R"))
+                threshold_setting = if (custom_PFT_frac_mapped) {
+                    'provide a positive custom PFT fraction (and nonzero LAI if biogeochemistry is disabled)'
+                } else {
+                    'adjust PFT_frac_threshold in input_TEMIR_crop_extension.R'
+                }
+                print(paste0('To simulate ', pftname[ipft], ', ', threshold_setting))
             }
             next
             
@@ -376,39 +389,27 @@ f_simulate_ij = function(IJ) {
                 latest_planting_doy_SH = latest_planting_jday_possible_SH[ipft]; if (at_tropical_flag) {if (maize_flag) {latest_planting_doy_SH = 288} else if (soybean_flag) {latest_planting_doy_SH = 365}}
             }
             
-            # Reading planting and harvesting GDD requirements (version 2.0)
-            # TODO: Current 'prescribed-map' is largely based on the Sack calender, in the future a more generalized script to read in planting date is required.
+            # Read custom phenology for this PFT and grid cell.
             if (biogeochem_flag) {
-                
-                # planting date
-                if (crop_planting_date_method == 'prescribed-map') {
-                    if (maize_flag) {
-                        if (crop_growing_season == 'primary') {
-                            prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,1], digits = 0)
-                        } else if (crop_growing_season == 'secondary') {
-                            prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,7], digits = 0)
-                        } else {
-                            stop("'crop_growing_season' for Sack dataset is not correctly specified")
-                        }
-                    } else if (springwheat_flag) {
-                        prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,2], digits = 0)
-                    } else if (winterwheat_flag) {
-                        prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,3], digits = 0)
-                    } else if (soybean_flag) {
-                        prescribed_planting_date = round(prescribed_planting_date_Sack[i,j,4], digits = 0)
+                GDDmat_map_value = GDDrepr_map_value = GDDemer_map_value = NA_real_
+                if (managed_crop_flag &&
+                    any(c(crop_planting_date_method, GDDmat_method,
+                          GDDrepr_method, GDDemer_method) == 'prescribed-map')) {
+                    custom_cell = f_custom_crop_phenology_cell(
+                        custom_phenology_map, i, j, pftnum[ipft],
+                        required_fields = required_custom_fields
+                    )
+                    if (crop_planting_date_method == 'prescribed-map') {
+                        prescribed_planting_date = custom_cell$planting_date
                     }
+                    GDDmat_map_value = custom_cell$GDDmat
+                    GDDrepr_map_value = custom_cell$GDDrepr
+                    GDDemer_map_value = custom_cell$GDDemer
                 }
-                
-                # GDDmat
                 if (GDDmat_method == 'CLM4.5') {
                     GDD0 = GDD0_map[i,j]
                     GDD8 = GDD8_map[i,j]
                     GDD10 = GDD10_map[i,j]
-                } else if (GDDmat_method == 'prescribed-map') {
-                    GDDmat_maize = GDDmat_maize_map[i,j]
-                    GDDmat_springwheat = GDDmat_springwheat_map[i,j]
-                    GDDmat_winterwheat = GDDmat_winterwheat_map[i,j]
-                    GDDmat_soybean = GDDmat_soybean_map[i,j]
                 }
             }
             
@@ -587,7 +588,7 @@ f_simulate_ij = function(IJ) {
                 # In other time steps, read simulation results from temp_data/xxx.RData of the last model-day.
                 
                 if (biogeochem_flag) {
-                    if (current_date == start_date && h == 1) {
+                    if (current_date == start_date && h == 1 && !continue_flag) {
                         
                         ###### Initialization by declaring variables
                         BGC_variable_declaration_names = c("a_stem","a_leaf","a_stem_leafem","a_leaf_leafem","GDDT2m","GDDTsoil","GDD_mat","GDD_repr","GDD_emer",
@@ -621,7 +622,7 @@ f_simulate_ij = function(IJ) {
                         
                     } else if (h == 1) {
                         ### LAI_prev for the second day is read from initial_data in BGC mode, otherwise it is read from temp_data from the day before yesterday
-                        if (current_date != to.yyyymmdd(from.yyyymmdd(start_date) + 24)) {
+                        if (continue_flag || current_date != to.yyyymmdd(from.yyyymmdd(start_date) + 24)) {
                             date_before_yesterday = to.yyyymmdd(from.yyyymmdd(current_date) - 48)
                             # filename = paste0(sim_dir,'temp_data/temp_',date_before_yesterday,'/temp_i',i_str,'_j', j_str, '.RData')
                             filename = paste0('temp_data/temp_',date_before_yesterday,'/temp_i',i_str,'_j', j_str, '.RData')
@@ -635,7 +636,7 @@ f_simulate_ij = function(IJ) {
                         prev_date = to.yyyymmdd(from.yyyymmdd(current_date) - 24)
                         # filename = paste0(sim_dir,'temp_data/temp_',prev_date,'/temp_i',i_str,'_j', j_str, '.RData')
                         filename = paste0('temp_data/temp_',prev_date,'/temp_i',i_str,'_j', j_str, '.RData')
-                        print(paste0("Loading ", filename))
+                        if (single_site_flag) print(paste0("Loading ", filename))
                         load(filename)
                         
                         ### Name in BGC_variable_readin_value should be consistent to the output temp_data 
@@ -785,7 +786,7 @@ f_simulate_ij = function(IJ) {
                         # TS from data maps
                         if (T_soil_source == 'MERRA2') {
                             T_soil_array_input =  c(TSOIL1[i,j,h], TSOIL2[i,j,h], TSOIL3[i,j,h], TSOIL4[i,j,h], TSOIL5[i,j,h])
-                        } else if (T_soil_source == 'custom') {
+                        } else if (T_soil_source == 'custom-map') {
                             T_soil_array_input = vapply(names(custom_soil_temperature_vars),
                                 function(soil_var) get(soil_var)[i,j,h], numeric(1))
                         }
@@ -799,7 +800,7 @@ f_simulate_ij = function(IJ) {
                 if (!O3_fixed_flag) {
                     if (use_site_obs_flag && using_site_o3_flag) {
                         # O3 read from dataframe
-                        O3_conc = O3_hourly
+                        O3_conc = O3_hourly[h]
                     } else {
                         # O3 read from .nc map
                         O3_conc = O3_hourly[i,j,(n_day_whole-1)*24+h]
@@ -838,7 +839,7 @@ f_simulate_ij = function(IJ) {
                 if (!biogeochem_flag) {
                     LAI_prev = LAI - (LAI - LAI_prev_day)/(24/dt_hr)
                 } else {
-                    if (current_date != start_date) {
+                    if (current_date != start_date || continue_flag) {
                         # When LAI is calculated, new LAI is calculated at h == 24, therefore LAI_prev and LAI are taken from temp_data of d = n - 2 and d = n - 1 respectively.
                         # The 'heal' in f_ozone_impact calculated from these two variables will be overestimated (underestimated) if d^2LAI/dt^2 < 0 (> 0)
                         LAI_prev = LAI - (LAI - LAI_prev_day)/(24/dt_hr)
@@ -1165,7 +1166,7 @@ f_simulate_ij = function(IJ) {
                         # MR root fraction weight calculated with specified depth from site TS measurement
                         root_frac_site_Tsoil_pft
                     } else {
-                        # MR root fraction weight calculated with specified depth from MERRA2 TS maps
+                        # MR root fraction weights for the selected mapped soil temperatures
                         root_frac_map_Tsoil_pft
                     }
 
@@ -1214,7 +1215,6 @@ f_simulate_ij = function(IJ) {
                         } else if (managed_crop_flag) {
                             # prescribed_planting_date_readin are required if get_planting_date_option == 'prescribed-map' or 'prescribed-site'
                             # GDDx_20yr are required if get_GDDmat_method == 'CLM4.5'
-                            # GDDmat_M/S/W are requried if get_GDDmat_method == 'Sack'
                             
                             # Phenology for crop-type PFT (excluding generic crops 'c3_crop' and 'c3_irrigated')
                             crop_phenology = f_crop_phenology(T_10_d = T_10d, T_min_10_d = Tmin_10d, T_soil = T_soil_daily, T2m = T_daily,
@@ -1224,10 +1224,11 @@ f_simulate_ij = function(IJ) {
                                                               crop_living_flag = crop_live_flag, crop_planting_flag = crop_plant_flag, leaf_emer_flag = leaf_emergence_flag, grain_filling_flag = grain_fill_flag, harvesting_flag = harvest_flag,
                                                               prescribed_planting_date_readin = if (crop_planting_date_method != 'CLM4.5') {prescribed_planting_date} else {NULL}, planting_jday = day_of_planting, grain_filling_jday = day_of_grain_filling, harvest_jday = day_of_harvest, day_since_crop_senescence = day_since_crop_senes,
                                                               GDD0_20yr = ifelse(exists("GDD0"), yes = GDD0, no = NULL), GDD8_20yr = ifelse(exists("GDD8"), yes = GDD8, no = 10), GDD10_20yr = ifelse(exists("GDD10"), yes = GDD10, no = NULL),
-                                                              GDDmat_M = ifelse(exists("GDDmat_maize"), yes = GDDmat_maize, no = NULL), GDDmat_S = ifelse(exists("GDDmat_soybean"), yes = GDDmat_soybean, no = NULL), GDDmat_SW = ifelse(exists("GDDmat_springwheat"), yes = GDDmat_wheat, no = NULL), GDDmat_WW = ifelse(exists("GDDmat_winterwheat"), yes = GDDmat_winterwheat, no = NULL),
+                                                              GDDmat_map_value = GDDmat_map_value, GDDrepr_map_value = GDDrepr_map_value, GDDemer_map_value = GDDemer_map_value,
                                                               hybgdd = GDDmat_max, GDD_baseT = GDD_base_T, GDD_maxIncrease = GDDT2m_change_max, max_growing_season_length = crop_season_length_max, leaf_longevity = leaflong, T_plant_req = avg_T_planting_req, T_min_plant_req = min_T_planting_req, repr_GDDfrac = repr_GDDfraction, emer_GDDfrac = emer_GDDfraction,
                                                               prescribed_min_plant_jday = ifelse(test = at_NH_flag, yes = earliest_planting_doy_NH, no = earliest_planting_doy_SH), prescribed_max_plant_jday = ifelse(test = at_NH_flag, yes = latest_planting_doy_NH, no = latest_planting_doy_SH),
-                                                              at_NH_flag = at_NH_flag)
+                                                              at_NH_flag = at_NH_flag,
+                                                              diagnostic_location = sprintf('PFT %d at %.1f E, %.1f N', pftnum[ipft], lon[i], lat[j]))
                             
 
                             simulateIJ_crop_phenology_variable_name = c("crop_emergence_flux", "leaf_C_loss_flux", "grain_C_loss_flux", "livestem_C_loss_flux", "livestem_resv_C_loss_flux", "fineroot_C_loss_flux",

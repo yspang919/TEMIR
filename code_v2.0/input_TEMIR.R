@@ -7,7 +7,8 @@
 
 # R library location
 # If it is not provided (NA), packages will be installed and read from the default R library path.
-r_library_loc = 'C:/Users/Documents/TEMIR/lib/'
+# r_library_loc = 'C:/Users/Documents/TEMIR/lib/'
+r_library_loc = 'C:/Program Files/R/R-4.5.1/library'
 
 # Run in cluster environment (i.e., not on personal computer)?
 cluster_flag = FALSE
@@ -29,15 +30,20 @@ debug_flag = FALSE
 # Required directories:
 
 # Set TEMIR directory:
-TEMIR_dir = path.expand('~/Documents/TEMIR/')
+# TEMIR_dir = path.expand('~/Documents/TEMIR/')
+TEMIR_dir = path.expand("C:/Users/jacky/Documents/Github/TEMIR/")
 # Set source code directory:
 code_dir = paste0(TEMIR_dir, 'code_v2.0/')
 # Set meteorological data directory:
-met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5/')
+# met_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/met_data/GEOS_2x2.5/')
+met_data_dir = path.expand("G:/My Drive/Angus_FYP/data/ERA5_data/merged_file/")  # Specific for ERA5
 # Set PFT and surface data directory:
-surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
+# surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/surf_data/clm2/')
+external_TEMIR_inputs_dir = path.expand('C:/Users/jacky/Documents/TEMIR/TEMIR_inputs/')
+surf_data_dir = path.expand(paste0(external_TEMIR_inputs_dir, 'surf_data/clm2/'))
 # Set processed PFT and surface output directory:
-processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
+# processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
+processed_surf_data_dir = path.expand(paste0(external_TEMIR_inputs_dir, 'processed_surf_data/'))
 
 ################################################################################
 ### Model configuration:
@@ -47,12 +53,12 @@ processed_surf_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/processed_surf_data/')
 # It should be "GEOSFP", "MERRA2", or "CUSTOM".
 # CUSTOM reads prepared meteorological maps configured in settings_custom_met_inputs.R.
 # met_name = 'GEOSFP'
-met_name = 'MERRA2'
+met_name = 'CUSTOM'
 
 # For single site simulations, users could provide site measurements data (e.g., FLUXNET2015, other site-measurements) stored in .RData to drive TEMIR instead of mapped inputs (e.g., ozone, meteorology).
 # A complete meteorological map source is required regardless of site observations.
 # Refer to 'settings_1site_inputs.R' for additional settings.
-use_site_obs_flag = TRUE
+use_site_obs_flag = FALSE
 
 # Model dimensions:
 # Time step (hr):
@@ -60,14 +66,16 @@ dt_hr = 1
 # Global longitude and latitude grid:
 # Coordinates must match the prepared meteorological fields exactly. Land surface
 # and prescribed LAI data are regridded to these coordinates and cached by grid.
-dlon = 2.5
-lon = seq(-180, 177.5, by=dlon)
-dlat = 2.0
-lat = seq(-90, 90, by=dlat)
+dlon = 0.5
+# lon = seq(-180, 177.5, by=dlon)
+lon = seq(73.5, 135, by=dlon)
+dlat = 0.5
+# lat = seq(-90, 90, by=dlat)
+lat = seq(18, 53.5, by=dlat)
 
 # Model run dates:
-start_date = 20100401
-end_date = 20100930
+start_date = 20150101  # 20100401
+end_date = 20150102  # 20100930
 
 # Continue from previous run?
 # If set true, temporary data within 10 days before the start date are needed.
@@ -90,8 +98,8 @@ if (single_site_flag) {
    lat_sim = 46.0
 } else {
    # Specify range of lon/lat of a given region of interest:
-   lon_sim = c(-180,180)
-   lat_sim = c(-90,90)
+   lon_sim = c(73.5, 135)
+   lat_sim = c(18, 53.5)
 }
 
 ################################################################################
@@ -101,7 +109,7 @@ if (single_site_flag) {
 # Which plant function type (PFT) to simulate?
 # Default PFTs follow the classification used in Community Land Model version 4.5 (CLM4.5) shown in PFT_df below
 # Please refer to each PFT by its PFT number quote in the first column of PFT_df (i.e., not_vegetated = 0)
-sim_PFT = 17
+sim_PFT = c(18, 20, 24)  # maize, wheat, soybean
 
 # Default CLM4.5 PFT dataframe:
 # 1st col = PFT number; 2nd col = PFT description
@@ -140,7 +148,7 @@ PFT_df = `colnames<-`(rbind.data.frame(
 ### Basic ecosystem model parameters ###
 
 # Ambient CO2 concentration (ppm):
-CO2_conc = 390
+CO2_conc = 400
 
 # Fixed photosynthetic parameters:
 # Nitrogen extinction coefficient:
@@ -193,7 +201,7 @@ gs_scheme_type = 'ecophysiological'
 gs_water_stress_scheme = 'CLM4.5'
 
 # CO2 scaling function for dry deposition velocity calculations:
-CO2_scale_flag = TRUE
+CO2_scale_flag = FALSE
 
 ################################################################################
 
@@ -227,8 +235,11 @@ if (O3_damage_flag && !O3_fixed_flag) {
    O3_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/o3_input/')
    
    # Set ozone nc filename:
-   # Dimensions of ozone concentration array must be: [longitude, latitude, hours of simulation year]
-   # Thus, ozone damage can only be simulated year by year, and ozone nc file has to be specified here manually.
+   # Dimensions of ozone concentration array must be:
+   # [longitude, latitude, hours of calendar year] in ppbv, beginning at
+   # January 1 00:00 UTC. The reader checks the 8760/8784-hour length;
+   # users must ensure the values are hourly and in chronological UTC order.
+   # Supply one file for each simulation year.
    # E.g., if naming convention is "CTRL_hourlyO3_2010.nc", the following subnames should be specified as:
    # O3_subn1 = 'CTRL_hourlyO3_'
    # O3_subn2 = '.nc'
@@ -241,8 +252,49 @@ if (O3_damage_flag && !O3_fixed_flag) {
    # Set ozone dimensions in a named vector:
    O3_dim_vec = c(longitude = 'lon', latitude = 'lat', time = 'time')
    
-   # Please note that if the O3 file for the simulation year is not available, the model would not stop, but would look for an available year that is the closest to the simulation year.
+   # If a simulation year is missing, TEMIR uses the closest available year
+   # with the same number of calendar hours and reports the substitution.
    
+}
+
+################################################################################
+
+### PFT fractions ###
+
+# 'CLM' uses the regridded CLM surface fractions.
+# 'custom-map' reads an RDS list with lon, lat, and a [lon, lat, layer]
+# custom_PFT_frac array (the 2015 crop file calls this array 'fraction').
+# Its coordinates must cover the full model lon/lat grid, not just lon_sim/lat_sim.
+# Map each file layer to one or more existing 1-based model PFT indices (ipft).
+# This changes fractions for PFTs already in the model; sim_PFT still chooses
+# which PFTs run, and the map does not supply their LAI or physiological inputs.
+PFT_frac_method = 'custom-map'
+
+if (PFT_frac_method == 'custom-map') {
+   custom_PFT_frac_file =
+      file.path(TEMIR_dir, 'TEMIR_inputs', 'custom_crop_distribution',
+                'china2015_staplecrops_distribution.rds')
+   # Example: maize layer 1 -> rainfed/irrigated ipft 18/19; spring wheat
+   # layer 2 -> 20/21; soybean layer 3 -> 24/25. Any existing PFT may be used.
+   custom_PFT_frac_layer_to_ipft = data.frame(
+      layer = c(1L, 1L, 2L, 2L, 3L, 3L),
+      ipft = c(18L, 19L, 20L, 21L, 24L, 25L)
+   )
+   # Mapped PFTs simulate wherever their overlaid fraction is positive.
+   # Unmapped PFTs retain TEMIR's usual minimum-fraction setting.
+   # 'CLM' keeps original CLM fractions in LAI scaling and aerodynamic
+   # calculations. Use 'custom-map' for a physically consistent replacement
+   # of tree/grass/other land-cover fractions across these calculations.
+   # The paired 2015 crop fractions are for separate per-area simulations,
+   # so this example retains the CLM fractions for surface calculations.
+   custom_PFT_frac_surface_method = 'CLM'
+   if (!custom_PFT_frac_surface_method %in% c('CLM', 'custom-map')) {
+      stop('custom_PFT_frac_surface_method must be CLM or custom-map')
+   }
+}
+
+if (!PFT_frac_method %in% c('CLM', 'custom-map')) {
+   stop('PFT_frac_method must be CLM or custom-map')
 }
 
 ################################################################################

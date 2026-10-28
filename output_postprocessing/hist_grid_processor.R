@@ -1,344 +1,444 @@
-################################################################################
-### Terrestrial Ecosystem Model in R (TEMIR)
-### Post-processing script for gridded history outputs and spreadsheet export
-################################################################################
-
-# This script reads gridded TEMIR history files from a simulation case,
-# extracts selected hourly and daily variables, and saves processed outputs for
-# each simulated PFT in a tabular format for further inspection and analysis.
-
-library(ncdf4)
-library(openxlsx)
-
-############## To be modify by user
-TEMIR_dir = 'C:/Users/jacky/Documents/TEMIR/TEMIR_publish_version/'
-# location where simulation result are stored
-run_dir= paste0(TEMIR_dir, 'TEMIR_run/')
-
-# Required tool for post processing
-source(paste0(TEMIR_dir, 'code_v2.0/tools.R'))
-
-# name of the simulation case
-casename = 'crop_sim_example'
-
-# set working directory to be the output directory of the simulation case
-setwd(paste0(run_dir,casename,'/hist_data/'))
-
-# simulation start and end date
-start_date = 20100401
-end_date = 20100930
-
-# variables to be output (that have daily resolution)
-daily_variable = c('LAI', 'GPP', 'NPP', 
-                   'GDDT2m',
-                   'leafC', 'finerootC', 'livestemC', 'grainC', 'htop')
-
-# variables to be output (that have hourly resolution)
-hourly_variable = c('A_can', 'g_can', 'g_s', 'g_ssun', 'g_ssha', 'phi_sun', 'phi_sha', 'LAI_sun', 'LAI_sha', 'beta_t')
-
-
-# For ozone simulation, also output the ozone-related hourly variable 
-O3_simulation_flag = FALSE
-if (O3_simulation_flag) {
-    hourly_variable = c(hourly_variable, 'CUO_can', 'CUO_sun', 'CUO_sha')
-}
-
-# whether calculate daily mean and output them for hourly variable
-output_hourly_var_as_daily_mean = FALSE
-
-
-# PFT number(s) of the PFT of interest in the simulation
-# R index starts from 1, and PFT index starts from 0. Therefore so we need to plus 1 for the PFT index
-# target_PFT = 0:24 + 1    # full set of PFT
-target_PFT = 17 + 1   # rainfed maize
-
-# output file format for the post-processed data
-# 'xlsx': data frame output as xlsx file, each sheet contains result for one PFT, it only supports for single-site simulations.
-# 'Rdata': data frame will be stored in a .RData, 
-output_format = 'xlsx'
-
-
-######################## PFT number and PFT name
-PFT_num_name_df = data.frame(
-    PFT_r_index = 1:25,
-    PFT_number = 0:24,
-    PFT_description = c('not_vegetated',
-                        'needleleaf_evergreen_temperate_tree',
-                        'needleleaf_evergreen_boreal_tree',
-                        'needleleaf_deciduous_boreal_tree',
-                        'broadleaf_evergreen_tropical_tree',
-                        'broadleaf_evergreen_temperate_tree',
-                        'broadleaf_deciduous_tropical_tree',
-                        'broadleaf_deciduous_temperate_tree',
-                        'broadleaf_deciduous_boreal_tree',
-                        'broadleaf_evergreen_shrub',
-                        'broadleaf_deciduous_temperate_shrub',
-                        'broadleaf_deciduous_boreal_shrub',
-                        'c3_arctic_grass',
-                        'c3_non-arctic_grass',
-                        'c4_grass',
-                        'c3_crop',
-                        'c3_irrigated',
-                        'corn',
-                        'irrigated_corn',
-                        'spring_temperate_cereal',
-                        'irrigated_spring_temperate_cereal',
-                        'winter_temperate_cereal',
-                        'irrigated_winter_temperate_cereal',
-                        'soybean',
-                        'irrigated_soybean'),
-    stringsAsFactors = FALSE
+# Process daily TEMIR history files for a site or regional grid.
+# Edit these settings and run this file with Rscript. In an interactive R
+# session, source this file and call do.call(f_process_hist_grid, settings).
+# PFT numbers are TEMIR's zero-based values (e.g. 17 = rainfed maize).
+settings = list(
+   run_dir = 'TEMIR_run/China_crop_1day_test',
+   start_date = 20150101,
+   end_date = 20150102,
+   pft_numbers = c(17L, 18L, 19L, 20L, 23L, 24L),
+   output_format = 'nc',        # nc, rds, csv, xlsx
+   hourly_mode = 'daily_mean', # none, daily_mean, full, both
+   output_dir = NULL,          # NULL uses RUN_DIR/postprocessed
+   daily_variables = c('LAI', 'GPP', 'NPP', 'GDDT2m', 'leafC',
+                       'finerootC', 'livestemC', 'grainC', 'htop'),
+   hourly_variables = c('A_can', 'g_can', 'g_s', 'g_ssun', 'g_ssha',
+                        'phi_sun', 'phi_sha', 'LAI_sun', 'LAI_sha',
+                        'beta_t', 'CUO_can', 'CUO_sun', 'CUO_sha')
 )
 
-f_clean_sheet_name = function(sheet_name, existing_sheet_names = character()) {
-    clean_name = gsub('[\\\\/\\?\\*\\[\\]:]', '_', sheet_name)
-    clean_name = gsub("'", '', clean_name)
-    clean_name = substr(clean_name, 1, 31)
-    if (!nzchar(clean_name)) clean_name = 'PFT'
+f_process_regional_hist = function(run_dir, start_date, end_date,
+                                    pft_numbers = c(17L, 18L, 19L, 20L, 23L, 24L),
+                                    hourly_mode = 'daily_mean', output_path = NULL,
+                                    daily_variables = settings$daily_variables,
+                                    hourly_variables = settings$hourly_variables) {
+   if (!requireNamespace('ncdf4', quietly = TRUE)) stop('Package ncdf4 is required')
+   if (!hourly_mode %in% c('daily_mean', 'full', 'none', 'both')) {
+      stop('hourly_mode must be daily_mean, full, none, or both')
+   }
+   start_day = as.Date(as.character(start_date), format = '%Y%m%d')
+   end_day = as.Date(as.character(end_date), format = '%Y%m%d')
+   if (is.na(start_day) || is.na(end_day) || start_day > end_day) {
+      stop('Supply a valid start and end date in YYYYMMDD format')
+   }
+   days = seq(start_day, end_day, by = 'day')
+   day_codes = format(days, '%Y%m%d')
+   run_dir = normalizePath(run_dir, winslash = '/', mustWork = TRUE)
+   input_files = file.path(run_dir, 'hist_data', paste0('hist_grid_', day_codes, '.nc'))
+   missing_files = input_files[!file.exists(input_files)]
+   if (length(missing_files)) {
+      stop('Missing ', length(missing_files), ' daily history file(s); first: ', missing_files[1L])
+   }
+   if (is.null(output_path)) {
+      output_path = file.path(run_dir, 'postprocessed',
+                              paste0('processed_', day_codes[1L], '_', tail(day_codes, 1L),
+                                     '_pft', paste(pft_numbers, collapse = '-'), '.nc'))
+   }
+   dir.create(dirname(output_path), recursive = TRUE, showWarnings = FALSE)
+   if (file.exists(output_path)) stop('Output already exists: ', output_path)
+   partial_path = paste0(output_path, '.partial.nc')
+   if (file.exists(partial_path)) stop('Partial output already exists: ', partial_path)
+   success = FALSE
+   on.exit(if (!success && file.exists(partial_path)) unlink(partial_path), add = TRUE)
 
-    candidate_name = clean_name
-    suffix_counter = 1
-    while (candidate_name %in% existing_sheet_names) {
-        suffix = paste0('_', suffix_counter)
-        candidate_name = paste0(substr(clean_name, 1, 31 - nchar(suffix)), suffix)
-        suffix_counter = suffix_counter + 1
-    }
+   first = ncdf4::nc_open(input_files[1L])
+   first_open = TRUE
+   on.exit(if (first_open) ncdf4::nc_close(first), add = TRUE)
+   lon = ncdf4::ncvar_get(first, 'lon')
+   lat = ncdf4::ncvar_get(first, 'lat')
+   source_pft = ncdf4::ncvar_get(first, 'pft')
+   source_hour = if (hourly_mode == 'none') NULL else
+      ncdf4::ncvar_get(first, 'hour')
+   pft_numbers = as.integer(pft_numbers)
+   if (!length(pft_numbers) || anyNA(pft_numbers) || anyDuplicated(pft_numbers)) {
+      stop('pft_numbers must be nonempty, unique integers')
+   }
+   pft_index = match(pft_numbers, source_pft)
+   if (anyNA(pft_index)) {
+      stop('PFT number(s) absent from history files: ',
+           paste(pft_numbers[is.na(pft_index)], collapse = ', '))
+   }
+   source_vars = names(first$var)
+   daily_candidates = unique(daily_variables)
+   hourly_candidates = unique(hourly_variables)
+   daily_vars = intersect(daily_candidates, source_vars)
+   hourly_vars = if (hourly_mode == 'none') character() else
+      intersect(hourly_candidates, source_vars)
+   if (!length(c(daily_vars, hourly_vars))) stop('No requested variables in ', input_files[1L])
+   if (length(setdiff(daily_candidates, daily_vars))) {
+      message('Daily variables unavailable in source: ',
+              paste(setdiff(daily_candidates, daily_vars), collapse = ', '))
+   }
+   for (name in daily_vars) {
+      dims = vapply(first$var[[name]]$dim, function(x) x$name, character(1))
+      if (!identical(dims, c('lon', 'lat', 'pft'))) {
+         stop('Expected daily [lon, lat, pft] variable: ', name)
+      }
+   }
+   for (name in hourly_vars) {
+      dims = vapply(first$var[[name]]$dim, function(x) x$name, character(1))
+      if (!identical(dims, c('lon', 'lat', 'pft', 'hour')) ||
+          first$dim$hour$len != 24L) {
+         stop('Expected 24-hour [lon, lat, pft, hour] variable: ', name)
+      }
+   }
+   nlon = length(lon); nlat = length(lat); npft = length(pft_index)
+   x = ncdf4::ncdim_def('lon', 'degrees_east', lon)
+   y = ncdf4::ncdim_def('lat', 'degrees_north', lat)
+   p = ncdf4::ncdim_def('pft', 'TEMIR PFT number', pft_numbers)
+   tday = ncdf4::ncdim_def('day', 'days since 1970-01-01',
+                           as.numeric(days - as.Date('1970-01-01')))
+   if (hourly_mode %in% c('full', 'both')) {
+      thour = ncdf4::ncdim_def('hour',
+                               paste0('hours since ', format(start_day, '%Y-%m-%d'), ' 00:00:00 UTC'),
+                               seq.int(0L, length(days) * 24L - 1L))
+   }
+   definitions = list()
+   for (name in daily_vars) {
+      definitions[[name]] = ncdf4::ncvar_def(name, first$var[[name]]$units,
+                                             list(x, y, p, tday), missval = -9999,
+                                             prec = 'float', compression = 4)
+   }
+   for (name in hourly_vars) {
+      if (hourly_mode %in% c('daily_mean', 'both')) {
+         output_name = if (startsWith(name, 'CUO_'))
+            paste0('daily_end_', name) else paste0('daily_mean_', name)
+         definitions[[output_name]] = ncdf4::ncvar_def(output_name,
+            first$var[[name]]$units, list(x, y, p, tday),
+            missval = -9999, prec = 'float', compression = 4)
+      }
+      if (hourly_mode %in% c('full', 'both')) {
+         definitions[[name]] = ncdf4::ncvar_def(name,
+            first$var[[name]]$units, list(x, y, p, thour),
+            missval = -9999, prec = 'float', compression = 4)
+      }
+   }
+   ncdf4::nc_close(first)
+   first_open = FALSE
 
-    candidate_name
+   out = ncdf4::nc_create(partial_path, definitions)
+   out_open = TRUE
+   on.exit(if (out_open) ncdf4::nc_close(out), add = TRUE)
+   ncdf4::ncatt_put(out, 0, 'source', 'TEMIR daily hist_grid NetCDF files')
+   ncdf4::ncatt_put(out, 0, 'hourly_mode', hourly_mode)
+   for (day_index in seq_along(days)) {
+      input = ncdf4::nc_open(input_files[day_index])
+      if (!isTRUE(all.equal(ncdf4::ncvar_get(input, 'lon'), lon)) ||
+          !isTRUE(all.equal(ncdf4::ncvar_get(input, 'lat'), lat)) ||
+          !isTRUE(all.equal(ncdf4::ncvar_get(input, 'pft'), source_pft)) ||
+          (!is.null(source_hour) &&
+           !isTRUE(all.equal(ncdf4::ncvar_get(input, 'hour'), source_hour))) ||
+          !all(c(daily_vars, hourly_vars) %in% names(input$var))) {
+         ncdf4::nc_close(input)
+         stop('Grid, PFT, or variable mismatch in ', input_files[day_index])
+      }
+      for (name in daily_vars) {
+         values = array(NA_real_, c(nlon, nlat, npft, 1L))
+         for (k in seq_along(pft_index)) {
+            cell = ncdf4::ncvar_get(input, name,
+                   start = c(1L, 1L, pft_index[k]),
+                   count = c(nlon, nlat, 1L), collapse_degen = FALSE)
+            values[,,k,1L] = cell[,,1L]
+         }
+         ncdf4::ncvar_put(out, name, values,
+                          start = c(1L, 1L, 1L, day_index),
+                          count = c(nlon, nlat, npft, 1L))
+      }
+      for (name in hourly_vars) {
+         if (hourly_mode %in% c('full', 'both')) {
+            hourly_values = array(NA_real_, c(nlon, nlat, npft, 24L))
+         }
+         if (hourly_mode %in% c('daily_mean', 'both')) {
+            daily_values = array(NA_real_, c(nlon, nlat, npft, 1L))
+         }
+         for (k in seq_along(pft_index)) {
+            cell = ncdf4::ncvar_get(input, name,
+                   start = c(1L, 1L, pft_index[k], 1L),
+                   count = c(nlon, nlat, 1L, 24L), collapse_degen = FALSE)
+            if (hourly_mode %in% c('full', 'both')) {
+               hourly_values[,,k,] = cell[,,1L,]
+            }
+            if (hourly_mode %in% c('daily_mean', 'both')) {
+               if (startsWith(name, 'CUO_')) {
+                  daily_values[,,k,1L] = cell[,,1L,24L]
+               } else {
+                  means = rowMeans(matrix(cell, nrow = nlon * nlat), na.rm = TRUE)
+                  means[!is.finite(means)] = NA_real_
+                  daily_values[,,k,1L] = matrix(means, nrow = nlon, ncol = nlat)
+               }
+            }
+         }
+         if (hourly_mode %in% c('daily_mean', 'both')) {
+            output_name = if (startsWith(name, 'CUO_'))
+               paste0('daily_end_', name) else paste0('daily_mean_', name)
+            ncdf4::ncvar_put(out, output_name, daily_values,
+               start = c(1L, 1L, 1L, day_index),
+               count = c(nlon, nlat, npft, 1L))
+         }
+         if (hourly_mode %in% c('full', 'both')) {
+            ncdf4::ncvar_put(out, name, hourly_values,
+               start = c(1L, 1L, 1L, (day_index - 1L) * 24L + 1L),
+               count = c(nlon, nlat, npft, 24L))
+         }
+      }
+      ncdf4::nc_close(input)
+      message('Processed ', day_codes[day_index], ' (', day_index, '/', length(days), ')')
+   }
+   ncdf4::nc_close(out)
+   out_open = FALSE
+   if (!file.rename(partial_path, output_path)) stop('Could not finalize ', output_path)
+   success = TRUE
+   invisible(output_path)
 }
 
-f_get_sheet_name = function(target_pft_r_index, existing_sheet_names = character()) {
-    pft_row = PFT_num_name_df[match(target_pft_r_index, PFT_num_name_df$PFT_r_index), ]
-    if (nrow(pft_row) != 1) {
-        stop(paste0('Cannot find PFT description for target_PFT index ', target_pft_r_index))
-    }
-
-    raw_sheet_name = paste0('PFT', pft_row$PFT_number, '_', pft_row$PFT_description)
-    f_clean_sheet_name(sheet_name = raw_sheet_name, existing_sheet_names = existing_sheet_names)
+f_process_hist_grid = function(run_dir, start_date, end_date,
+                                 pft_numbers = c(17L, 18L, 19L, 20L, 23L, 24L),
+                                 output_format = 'nc', hourly_mode = 'daily_mean',
+                                 output_dir = NULL,
+                                 daily_variables = settings$daily_variables,
+                                 hourly_variables = settings$hourly_variables) {
+   if (!output_format %in% c('nc', 'rds', 'csv', 'xlsx')) {
+      stop('output_format must be nc, rds, csv, or xlsx')
+   }
+   if (!hourly_mode %in% c('none', 'daily_mean', 'full', 'both')) {
+      stop('hourly_mode must be none, daily_mean, full, or both')
+   }
+   run_dir = normalizePath(run_dir, winslash = '/', mustWork = TRUE)
+   start_day = as.Date(as.character(start_date), format = '%Y%m%d')
+   end_day = as.Date(as.character(end_date), format = '%Y%m%d')
+   if (is.na(start_day) || is.na(end_day) || start_day > end_day) {
+      stop('Supply a valid start and end date in YYYYMMDD format')
+   }
+   days = seq(start_day, end_day, by = 'day')
+   day_codes = format(days, '%Y%m%d')
+   files = file.path(run_dir, 'hist_data', paste0('hist_grid_', day_codes, '.nc'))
+   missing_files = files[!file.exists(files)]
+   if (length(missing_files)) {
+      stop('Missing ', length(missing_files), ' history file(s); first: ', missing_files[1L])
+   }
+   if (is.null(output_dir)) output_dir = file.path(run_dir, 'postprocessed')
+   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+   prefix = paste0('processed_', day_codes[1L], '_', tail(day_codes, 1L),
+                   '_pft', paste(pft_numbers, collapse = '-'))
+   if (output_format == 'nc') {
+      return(f_process_regional_hist(run_dir, start_date, end_date,
+                pft_numbers, hourly_mode,
+                file.path(output_dir, paste0(prefix, '.nc')),
+                daily_variables, hourly_variables))
+   }
+   if (!requireNamespace('ncdf4', quietly = TRUE)) stop('Package ncdf4 is required')
+   first = ncdf4::nc_open(files[1L])
+   on.exit(ncdf4::nc_close(first), add = TRUE)
+   lon = as.numeric(ncdf4::ncvar_get(first, 'lon'))
+   lat = as.numeric(ncdf4::ncvar_get(first, 'lat'))
+   source_pft = as.numeric(ncdf4::ncvar_get(first, 'pft'))
+   source_hour = as.numeric(ncdf4::ncvar_get(first, 'hour'))
+   pft_numbers = as.integer(pft_numbers)
+   if (!length(pft_numbers) || anyNA(pft_numbers) || anyDuplicated(pft_numbers)) {
+      stop('pft_numbers must be nonempty, unique integers')
+   }
+   pft_index = match(pft_numbers, source_pft)
+   if (anyNA(pft_index)) stop('Requested PFT number is absent from history files')
+   nlon = length(lon); nlat = length(lat); npft = length(pft_index)
+   if (output_format %in% c('csv', 'xlsx') && nlon * nlat != 1L) {
+      stop('CSV/XLSX export requires one grid cell; use nc or rds for a region')
+   }
+   if (output_format == 'xlsx' && !requireNamespace('openxlsx', quietly = TRUE)) {
+      stop('Package openxlsx is required for XLSX export')
+   }
+   if (length(source_hour) != 24L) stop('Expected 24 hourly steps per history file')
+   daily_candidates = unique(daily_variables)
+   hourly_candidates = unique(hourly_variables)
+   daily_vars = intersect(daily_candidates, names(first$var))
+   hourly_vars = if (hourly_mode == 'none') character() else
+      intersect(hourly_candidates, names(first$var))
+   if (!length(c(daily_vars, hourly_vars))) stop('No selected variables in history files')
+   for (name in daily_vars) {
+      dims = vapply(first$var[[name]]$dim, function(x) x$name, character(1))
+      if (!identical(dims, c('lon', 'lat', 'pft'))) {
+         stop('Expected daily [lon, lat, pft] variable: ', name)
+      }
+   }
+   for (name in hourly_vars) {
+      dims = vapply(first$var[[name]]$dim, function(x) x$name, character(1))
+      if (!identical(dims, c('lon', 'lat', 'pft', 'hour'))) {
+         stop('Expected hourly [lon, lat, pft, hour] variable: ', name)
+      }
+   }
+   want_summary = hourly_mode %in% c('daily_mean', 'both')
+   want_hourly = hourly_mode %in% c('full', 'both')
+   summary_name = function(name) if (startsWith(name, 'CUO_'))
+      paste0('daily_end_', name) else paste0('daily_mean_', name)
+   site = nlon == 1L && nlat == 1L
+   output_path = file.path(output_dir, paste0(prefix, '.', output_format))
+   if (file.exists(output_path)) stop('Processed output already exists: ', output_path)
+   regional_rds = output_format == 'rds' && !site
+   if (regional_rds) {
+      daily_names = daily_vars
+      summary_names = if (want_summary) vapply(hourly_vars, summary_name,
+                                               character(1)) else character()
+      hourly_names = if (want_hourly) hourly_vars else character()
+      estimated_gib = (as.double(nlon) * nlat * npft * length(days) * 8 *
+         (length(daily_names) + length(summary_names) +
+          24 * length(hourly_names))) / 1024^3
+      if (estimated_gib > 2) {
+         warning(sprintf('Regional RDS arrays need at least %.1f GiB of RAM; processing may need more. Select fewer variables/PFTs or use NetCDF if memory is limited.',
+                         estimated_gib))
+      }
+      regional_data = list(
+         lon = lon, lat = lat, pft_number = pft_numbers,
+         date = days,
+         UTC_time = if (want_hourly) as.POSIXct(days[1L], tz = 'UTC') +
+                    seq.int(0L, length(days) * 24L - 1L) * 3600 else NULL,
+         dimension_order = c('lon', 'lat', 'pft', 'time'),
+         daily = setNames(lapply(daily_names, function(x)
+            array(NA_real_, c(nlon, nlat, npft, length(days)))), daily_names),
+         daily_from_hourly = setNames(lapply(summary_names, function(x)
+            array(NA_real_, c(nlon, nlat, npft, length(days)))), summary_names),
+         hourly = setNames(lapply(hourly_names, function(x)
+            array(NA_real_, c(nlon, nlat, npft, length(days) * 24L))), hourly_names)
+      )
+   }
+   daily_rows = list(); hourly_rows = list()
+   for (day_index in seq_along(days)) {
+      input = ncdf4::nc_open(files[day_index])
+      if (!isTRUE(all.equal(as.numeric(ncdf4::ncvar_get(input, 'lon')), lon)) ||
+          !isTRUE(all.equal(as.numeric(ncdf4::ncvar_get(input, 'lat')), lat)) ||
+          !isTRUE(all.equal(as.numeric(ncdf4::ncvar_get(input, 'pft')), source_pft)) ||
+          !isTRUE(all.equal(as.numeric(ncdf4::ncvar_get(input, 'hour')), source_hour)) ||
+          !all(c(daily_vars, hourly_vars) %in% names(input$var))) {
+         ncdf4::nc_close(input)
+         stop('Grid, PFT, hour, or variable mismatch in ', files[day_index])
+      }
+      native = list(); summaries = list(); hourly = list()
+      for (name in daily_vars) {
+         values = array(NA_real_, c(nlon, nlat, npft))
+         for (k in seq_along(pft_index)) {
+            cell = ncdf4::ncvar_get(input, name,
+               start = c(1L, 1L, pft_index[k]),
+               count = c(nlon, nlat, 1L), collapse_degen = FALSE)
+            values[,,k] = cell[,,1L]
+         }
+         native[[name]] = values
+      }
+      for (name in hourly_vars) {
+         if (want_hourly) full_values = array(NA_real_, c(nlon, nlat, npft, 24L))
+         if (want_summary) daily_values = array(NA_real_, c(nlon, nlat, npft))
+         for (k in seq_along(pft_index)) {
+            cell = ncdf4::ncvar_get(input, name,
+               start = c(1L, 1L, pft_index[k], 1L),
+               count = c(nlon, nlat, 1L, 24L), collapse_degen = FALSE)
+            if (want_hourly) full_values[,,k,] = cell[,,1L,]
+            if (want_summary) {
+               if (startsWith(name, 'CUO_')) {
+                  daily_values[,,k] = cell[,,1L,24L]
+               } else {
+                  means = rowMeans(matrix(cell, nrow = nlon * nlat), na.rm = TRUE)
+                  means[!is.finite(means)] = NA_real_
+                  daily_values[,,k] = matrix(means, nrow = nlon, ncol = nlat)
+               }
+            }
+         }
+         if (want_hourly) hourly[[name]] = full_values
+         if (want_summary) summaries[[summary_name(name)]] = daily_values
+      }
+      ncdf4::nc_close(input)
+      if (regional_rds) {
+         for (name in names(native)) {
+            regional_data$daily[[name]][,,,day_index] = native[[name]]
+         }
+         for (name in names(summaries)) {
+            regional_data$daily_from_hourly[[name]][,,,day_index] = summaries[[name]]
+         }
+         for (name in names(hourly)) {
+            hour_indices = (day_index - 1L) * 24L + seq_len(24L)
+            regional_data$hourly[[name]][,,,hour_indices] = hourly[[name]]
+         }
+      } else {
+         daily_row = data.frame(UTC_date = rep(day_codes[day_index], npft),
+                                 pft_number = pft_numbers)
+         for (name in names(native)) daily_row[[name]] = as.vector(native[[name]])
+         for (name in names(summaries)) daily_row[[name]] = as.vector(summaries[[name]])
+         daily_rows[[day_index]] = daily_row
+         if (want_hourly) {
+            # TEMIR stores hourly slots as 1:24; the first slot is 00:00 UTC.
+            times = as.POSIXct(days[day_index], tz = 'UTC') +
+                    (seq_along(source_hour) - 1L) * 3600
+            hourly_row = data.frame(
+               UTC_time = rep(format(times, '%Y-%m-%d %H:%M:%S', tz = 'UTC'),
+                              each = npft),
+               pft_number = rep(pft_numbers, times = 24L))
+            for (name in names(hourly)) hourly_row[[name]] = as.vector(hourly[[name]])
+            hourly_rows[[day_index]] = hourly_row
+         }
+      }
+      message('Processed ', day_codes[day_index], ' (', day_index,
+              '/', length(days), ')')
+   }
+   if (regional_rds) {
+      partial_path = paste0(output_path, '.partial')
+      if (file.exists(partial_path)) stop('Partial output already exists: ', partial_path)
+      success = FALSE
+      on.exit(if (!success && file.exists(partial_path)) unlink(partial_path),
+              add = TRUE)
+      saveRDS(regional_data, partial_path)
+      if (!file.rename(partial_path, output_path)) {
+         stop('Could not finalize ', output_path)
+      }
+      success = TRUE
+      return(invisible(output_path))
+   }
+   daily_df = do.call(rbind, daily_rows)
+   hourly_df = if (want_hourly) do.call(rbind, hourly_rows) else NULL
+   if (output_format == 'rds') {
+      saveRDS(list(lon = lon, lat = lat, pft_number = pft_numbers,
+                   daily = daily_df, hourly = hourly_df), output_path)
+   } else if (output_format == 'csv') {
+      daily_path = file.path(output_dir, paste0(prefix, '_daily.csv'))
+      hourly_path = file.path(output_dir, paste0(prefix, '_hourly.csv'))
+      if (file.exists(daily_path) || (want_hourly && file.exists(hourly_path))) {
+         stop('CSV output already exists')
+      }
+      write.csv(daily_df, daily_path, row.names = FALSE, na = '')
+      if (want_hourly) write.csv(hourly_df, hourly_path, row.names = FALSE, na = '')
+      return(invisible(c(daily_path, if (want_hourly) hourly_path)))
+   } else {
+      workbook = openxlsx::createWorkbook()
+      openxlsx::addWorksheet(workbook, 'daily')
+      openxlsx::writeData(workbook, 'daily', daily_df)
+      if (want_hourly) {
+         openxlsx::addWorksheet(workbook, 'hourly')
+         openxlsx::writeData(workbook, 'hourly', hourly_df)
+      }
+      openxlsx::saveWorkbook(workbook, output_path, overwrite = FALSE)
+   }
+   invisible(output_path)
 }
 
-if (output_format == 'xlsx' && !requireNamespace('openxlsx', quietly = TRUE)) {
-    stop("The 'openxlsx' package is required for xlsx output. Please install it or switch output_format to 'RData'.")
+if (sys.nframe() == 0L) {
+   args = commandArgs(trailingOnly = TRUE)
+   if (length(args) > 6L || (length(args) > 0L && length(args) < 3L)) {
+      stop('Usage: Rscript hist_grid_processor.R RUN_DIR START END [PFT_NUMBERS_CSV] [nc|rds|csv|xlsx] [none|daily_mean|full|both]')
+   }
+   if (length(args)) {
+      settings$run_dir = args[1L]
+      settings$start_date = args[2L]
+      settings$end_date = args[3L]
+      if (length(args) >= 4L) settings$pft_numbers =
+         as.integer(strsplit(args[4L], ',', fixed = TRUE)[[1L]])
+      if (length(args) >= 5L) settings$output_format = args[5L]
+      if (length(args) >= 6L) settings$hourly_mode = args[6L]
+   }
+   result = do.call(f_process_hist_grid, settings)
+   message('Wrote ', paste(result, collapse = ', '))
 }
-
-######################## code execution
-day_vec = make.date.vec(start.date = start_date, end.date = end_date)
-# starting_POSIXct = as.POSIXct(start_date, format = '%Y%m%d', tz = 'UTC')
-# ending_POSIXct = as.POSIXct(end_date, format = '%Y%m%d', tz = 'UTC')
-
-
-for (day in seq(day_vec)) {
-    
-    nc = nc_open(paste0('hist_grid_',day_vec[day],'.nc'))
-    lon = ncvar_get(nc, 'lon')
-    lat = ncvar_get(nc, 'lat')
-    
-    if ((length(lon) > 1 || length(lat) > 1) && output_format == 'xlsx') {stop('xlsx output format not support for multi-site simulations')}
-    
-    
-    # create an empty vector for storing value of daily-resolution variables for each simulation day
-    if (!is.null(daily_variable)) {
-        tmp_daily_out = array(NA, dim = c(length(lon),length(lat),length(target_PFT),length(daily_variable)))
-    }
-    
-    # create an empty vector for storing hourly-resolution variables for each simulation day
-    tmp_hourly_out = array(NA, dim = c(length(lon),length(lat),length(target_PFT),24,length(hourly_variable)))
-    
-    if (day == 1) {
-        
-        # create an empty vector for storing daily-resolution variables for all simulation days 
-        if (!is.null(daily_variable)) {
-            # final_daily_output = array(data = NA, dim = c(length(lon),length(lat),length(day_vec),length(daily_variable)))
-            final_daily_output = array(data = NA, dim = c(length(lon),length(lat),length(target_PFT),length(day_vec),length(daily_variable)))
-        }
-        
-        if (output_hourly_var_as_daily_mean){
-            # create an empty vector for storing daily averages of hourly-resolution variables for all simulation days, if needed
-            final_dailyAvg_output = array(data = NA, dim = c(length(lon),length(lat),length(target_PFT),length(day_vec),length(hourly_variable)))
-            
-        } else {
-            # create an empty vector for storing hourly-resolution variables for all simulation days, if needed
-            final_hourly_output = array(data = NA, dim = c(length(lon),length(lat),length(target_PFT),length(day_vec)*24,length(hourly_variable)))
-            
-        }
-    }
-    
-    # obtain output from the nc file
-    # get values from daily variable
-    if (!is.null(daily_variable)) {
-        #get daily_variablrs
-        for (i in seq(daily_variable)) {
-            if (length(lon) == 1 && length(lat) == 1){
-                tmp_daily = ncvar_get(nc, varid = daily_variable[i])[target_PFT]  # dim(tmp_hourly) = length(PFT)
-            } else {
-                tmp_daily = ncvar_get(nc, varid = daily_variable[i])[,,target_PFT] # dim(tmp_daily) = c(lon,lat,PFT)
-            }
-            # tmp_daily_out[,,i] = tmp_daily
-            tmp_daily_out[,,,i] = tmp_daily
-        }
-    }
-    
-    # get values from hourly variables
-    for (j in seq(hourly_variable)) {
-        if (length(lon) == 1 && length(lat) == 1){
-            tmp_hourly = ncvar_get(nc, varid = hourly_variable[j])[target_PFT,]   # dim() = PFT, hour
-            tmp_hourly_out[1,1,,,j] = tmp_hourly                     
-        } else {
-            
-            tmp_hourly = ncvar_get(nc, varid = hourly_variable[j])[,,target_PFT,]  # lon lat pft hour
-            tmp_hourly_out[,,,,j] = tmp_hourly
-        }
-    }
-    
-    nc_close(nc)
-    
-    
-    # calculate the daily mean of hourly variable 
-    if (output_hourly_var_as_daily_mean) {
-        if (length(lon) == 1 && length(lat) == 1){
-            tmp_hourly_out = apply(tmp_hourly_out, c(1,2,3,5), FUN = mean, na.rm = T)
-        } else {
-            tmp_hourly_out = apply(tmp_hourly_out, c(1,2,3,5), FUN = mean, na.rm = T)
-        }
-    }
-    
-    # Insert the value of a daily variable to the daily output matrix
-    if (!is.null(daily_variable)) {
-        final_daily_output[,,,day,] = tmp_daily_out[,,,]
-    }
-    
-    # Insert the value of a daily-averaged hourly variable to the output matrix
-    if (output_hourly_var_as_daily_mean){
-        if (length(lon) == 1 && length(lat) == 1) {
-            final_dailyAvg_output[1,1,,day,] = tmp_hourly_out
-        } else {
-            final_dailyAvg_output[,,,day,] = tmp_hourly_out[,,,]
-        }
-    } else {
-        # Insert the value of a hourly variable to the output matrix
-        if (length(lon) == 1 && length(lat) == 1) {
-            final_hourly_output[1,1,,((day-1)*24+1):((day-1)*24+24),] = tmp_hourly_out
-        } else {
-            final_hourly_output[,,,((day-1)*24+1):((day-1)*24+24),] = tmp_hourly_out[,,,,]
-        }
-    }
-    
-    # Creating object names during the processing of the final simulation day
-    if (day == length(day_vec)) {
-        for (j in seq(hourly_variable)) {
-            if (output_hourly_var_as_daily_mean){
-                assign(x = paste0('dailyAvg_hourly_',hourly_variable[j]), value = final_dailyAvg_output[,,,,j])
-            } else {
-                assign(x = paste0('hourly_',hourly_variable[j]), value = final_hourly_output[,,,,j])
-            }
-        }
-        
-        if (!is.null(daily_variable)) {
-            for (i in seq(daily_variable)) {
-                assign(x = paste0('daily_',daily_variable[i]), value = final_daily_output[,,,,i])
-            }
-        }
-        
-        # saving the output
-        # the files are output at the hist_file in a simulation case
-        setwd(paste0(run_dir,casename,'/'))
-        
-        if (output_format == 'xlsx') {
-            daily_time_vec = as.POSIXct(as.character(day_vec), format = '%Y%m%d', tz = 'UTC')
-            hourly_time_vec = seq(from = daily_time_vec[1], by = 'hour', length.out = length(day_vec)*24)
-
-            if (output_hourly_var_as_daily_mean) {
-                daily_wb = openxlsx::createWorkbook()
-                existing_sheet_names = character()
-
-                for (pft_pos in seq_along(target_PFT)) {
-                    sheet_name = f_get_sheet_name(target_pft_r_index = target_PFT[pft_pos],
-                                                  existing_sheet_names = existing_sheet_names)
-                    existing_sheet_names = c(existing_sheet_names, sheet_name)
-
-                    output_df = data.frame(
-                        UTC_time = format(daily_time_vec, '%Y-%m-%d %H:%M:%S', tz = 'UTC'),
-                        stringsAsFactors = FALSE
-                    )
-
-                    if (!is.null(daily_variable)) {
-                        for (i in seq_along(daily_variable)) {
-                            output_df[[daily_variable[i]]] = as.vector(final_daily_output[1,1,pft_pos,,i])
-                        }
-                    }
-
-                    for (j in seq_along(hourly_variable)) {
-                        output_df[[hourly_variable[j]]] = as.vector(final_dailyAvg_output[1,1,pft_pos,,j])
-                    }
-
-                    openxlsx::addWorksheet(daily_wb, sheetName = sheet_name)
-                    openxlsx::writeData(daily_wb, sheet = sheet_name, x = output_df)
-                }
-
-                openxlsx::saveWorkbook(daily_wb,
-                                       file = paste0(casename, '_daily_processed.xlsx'),
-                                       overwrite = TRUE)
-            } else {
-                daily_wb = openxlsx::createWorkbook()
-                hourly_wb = openxlsx::createWorkbook()
-                daily_sheet_names = character()
-                hourly_sheet_names = character()
-
-                for (pft_pos in seq_along(target_PFT)) {
-                    daily_sheet_name = f_get_sheet_name(target_pft_r_index = target_PFT[pft_pos],
-                                                        existing_sheet_names = daily_sheet_names)
-                    hourly_sheet_name = f_get_sheet_name(target_pft_r_index = target_PFT[pft_pos],
-                                                         existing_sheet_names = hourly_sheet_names)
-                    daily_sheet_names = c(daily_sheet_names, daily_sheet_name)
-                    hourly_sheet_names = c(hourly_sheet_names, hourly_sheet_name)
-
-                    daily_df = data.frame(
-                        UTC_time = format(daily_time_vec, '%Y-%m-%d %H:%M:%S', tz = 'UTC'),
-                        stringsAsFactors = FALSE
-                    )
-                    if (!is.null(daily_variable)) {
-                        for (i in seq_along(daily_variable)) {
-                            daily_df[[daily_variable[i]]] = as.vector(final_daily_output[1,1,pft_pos,,i])
-                        }
-                    }
-
-                    hourly_df = data.frame(
-                        UTC_time = format(hourly_time_vec, '%Y-%m-%d %H:%M:%S', tz = 'UTC'),
-                        stringsAsFactors = FALSE
-                    )
-                    for (j in seq_along(hourly_variable)) {
-                        hourly_df[[hourly_variable[j]]] = as.vector(final_hourly_output[1,1,pft_pos,,j])
-                    }
-
-                    openxlsx::addWorksheet(daily_wb, sheetName = daily_sheet_name)
-                    openxlsx::writeData(daily_wb, sheet = daily_sheet_name, x = daily_df)
-
-                    openxlsx::addWorksheet(hourly_wb, sheetName = hourly_sheet_name)
-                    openxlsx::writeData(hourly_wb, sheet = hourly_sheet_name, x = hourly_df)
-                }
-
-                openxlsx::saveWorkbook(daily_wb,
-                                       file = paste0(casename, '_daily_processed.xlsx'),
-                                       overwrite = TRUE)
-                openxlsx::saveWorkbook(hourly_wb,
-                                       file = paste0(casename, '_hourly_processed.xlsx'),
-                                       overwrite = TRUE)
-            }
-        } else if (output_format == 'RData') {
-            # if output_hourly_var_as_daily_mean: output daily variables and daily averaged variables (1 file)
-            # else: output daily variables and hourly variables (two separated files)
-            if (output_hourly_var_as_daily_mean) {
-                save(list = c('start_date', 'end_date', 'target_PFT', 'lon','lat', paste0('daily_',daily_variable), paste0('dailyAvg_hourly_',hourly_variable)), file = paste0(casename,'_daily_processed.RData'))   
-            } else {
-                save(list = c('start_date', 'end_date', 'target_PFT', 'lon','lat', paste0('daily_',daily_variable)), file = paste0(casename,'_daily_processed.RData'))   
-                save(list = c('start_date', 'end_date', 'target_PFT', 'lon','lat', paste0('hourly_',hourly_variable)), file = paste0(casename,'_hourly_processed.RData'))   
-            }
-        }
-        
-
-    }
-    
-    print(paste0('Finished day = ',day, ' simulation date = ', day_vec[day]))
-}
-
-print(paste0('Finished without error, output files are located at ', run_dir,casename))

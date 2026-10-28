@@ -9,7 +9,8 @@
 TEMIR_version = '2.0'
 
 # Set TEMIR directory:
-TEMIR_dir = 'C:/Users/Document/TEMIR/'
+# TEMIR_dir = 'C:/Users/Document/TEMIR/'
+TEMIR_dir = "C:/Users/jacky/Documents/Github/TEMIR/"
 # Set simulation parent directory:
 # Users can specify their customized parent directory for their simulations here.
 sim_parent_dir = TEMIR_dir
@@ -19,7 +20,7 @@ sim_parent_dir = TEMIR_dir
 ################################################################################
 
 # Create a name for this simulation:
-simulation_name = 'crop_sim_example'
+simulation_name = 'China_crop_1day_test'
 
 # Simulation types:
 
@@ -69,8 +70,14 @@ file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/library_setup.R'),
 # Copy script that contains functions to analyze outputs:
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/find_hist_stat.R'), to = sim_dir)
 
-# Copy input script for the crop model (only if biogeochem_flag == TRUE)
-if (biogeochem_flag) file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_crop_extension.R'), to = sim_dir)
+# Copy crop input and custom phenology settings for every biogeochemistry run.
+# The settings file is only sourced at execution when a prescribed map is used.
+if (biogeochem_flag) {
+   file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'input_TEMIR_crop_extension.R'), to = sim_dir)
+   if (!file.copy(from = paste0(TEMIR_dir, '/extension_crop/', 'settings_custom_crop_phenology.R'), to = sim_dir)) {
+      stop('Could not copy settings_custom_crop_phenology.R into the simulation directory')
+   }
+}
 
 # Copy configuration for prepared user-provided meteorological maps
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/settings_custom_met_inputs.R'), to = sim_dir)

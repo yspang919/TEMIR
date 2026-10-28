@@ -50,7 +50,7 @@ dir_check = ls(pattern = "_dir$")
 if (met_name == 'CUSTOM') {
     dir_check = setdiff(dir_check, 'met_data_dir')
 }
-if (biogeochem_flag && T_soil_source == 'custom') {
+if (biogeochem_flag && T_soil_source == 'custom-map') {
     dir_check = setdiff(dir_check, 'soilT_data_dir')
 }
 for (idir in seq_along(dir_check)) {
@@ -78,6 +78,10 @@ source(paste0(code_dir, 'geophys_const.R'))
 
 # Useful functions:
 source(paste0(code_dir, 'tools.R'))
+
+if (O3_damage_flag && !O3_fixed_flag && !using_site_o3_flag) {
+   source(paste0(code_dir, 'read_o3_map.R'))
+}
 
 # Functions to compute aerodynamic conductance, temperature and humidity profiles:
 source(paste0(code_dir, 'Monin_Obukhov.R'))
@@ -185,7 +189,8 @@ for (n_i in 1:length(ind_lon)) {
 
 # Print general simulation information:
 if (!single_site_flag) {
-   if (lon_sim == c(-180, 180) && lat_sim == c(-90, 90)){
+   if (identical(lon_sim, c(-180, 180)) &&
+       identical(lat_sim, c(-90, 90))) {
       print(paste0('Global simulation using ', met_name, ' data...'), quote = FALSE)
    } else {
       print(paste0('Simulation using ', met_name, ' data : longitude = ', lon_sim[1],' to ', lon_sim[2], ', latitude = ', lat_sim[1], ' to ', lat_sim[2] ,'...'), quote = FALSE)
@@ -380,7 +385,7 @@ for (d in 1:n_day_sim) {
    
    #############################################################################
    
-   # Reload interannually varying inputs on YYYY/01/01 if necessary:
+   # Reload interannually varying inputs (O3-map and LAI-map) on YYYY/01/01 if necessary:
    
    if (paste0(MM, DD) == '0101') {
       
@@ -401,25 +406,15 @@ for (d in 1:n_day_sim) {
       
       # Ozone field is read every model year
       if (O3_damage_flag & !O3_fixed_flag & !using_site_o3_flag) {
-         if (length(year_vec) > 1) {
+         if (d > 1L && length(year_vec) > 1) {
             YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY))])
             last_YYYY_O3 = as.character(O3_used_years[which(year_vec == as.numeric(YYYY)) - 1])
             if (length(last_YYYY_O3) == 0) last_YYYY_O3 = 'no_YYYY_O3'
             if (YYYY_O3 != last_YYYY_O3) {
                filename = paste0(O3_data_dir, O3_subn1, YYYY_O3, O3_subn2)
                print(paste0('Loading surface O3 concentrations from ', filename, '...'), quote=FALSE)
-               nc = nc_open(filename)
-               lon_O3 = ncvar_get(nc, unname(O3_dim_vec['longitude']))
-               lat_O3 = ncvar_get(nc, unname(O3_dim_vec['latitude']))
-               # Surface O3 concentration (ppbv):
-               O3_hourly = ncvar_get(nc, O3_array_name)
-               nc_close(nc)
-               # Regrid to model resolution if input resolution is not consistent:
-               if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
-                  # Regrid to model resolution:
-                  print(paste0('Regridding hourly O3 concentrations for year ', YYYY_O3, '...'), quote=FALSE)
-                  O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
-               }
+               O3_hourly = f_read_o3_year(filename, O3_array_name, O3_dim_vec,
+                                           as.integer(YYYY_O3), lon, lat)
             }
          }
       }
@@ -431,6 +426,9 @@ for (d in 1:n_day_sim) {
       O3_hourly = field_measurement_o3_df %>% 
          filter(YYYYMMDD == current_date) %>% 
          pull(o3)  # length = 24
+      if (length(O3_hourly) != 24L) {
+         stop('Site ozone data on ', current_date, ' must contain 24 hourly values')
+      }
       
       if (any(is.na(O3_hourly))) {
          warning(paste0('Site ozone data on ', current_date, ' contains at least one NA values'))
@@ -482,7 +480,7 @@ for (d in 1:n_day_sim) {
    
    # Close nc file:
    nc_close(nc)
-   
+
    # Replacing MERRA2 meteorological data for one site with FLUXNET / site-measurements, if necessary
    if (single_site_flag && use_site_obs_flag) {
       if (FLUXNET_site_flag && FLUXNET_flag) {
@@ -531,7 +529,7 @@ for (d in 1:n_day_sim) {
             f_replace_soilT_with_custom_data(site_i = ind_lon, site_j = ind_lat)
          }
          
-       } else if (T_soil_source == 'custom') {
+       } else if (T_soil_source == 'custom-map') {
           filename = custom_soil_temperature_file(paste0(YYYY, MM, DD))
           nc = nc_open(filename)
           for (soil_var in names(custom_soil_temperature_vars)) {
@@ -579,12 +577,44 @@ for (d in 1:n_day_sim) {
    environment(f_hist_reshape) = globalenv()
    
    # Simulate for each lon/lat:
+   # BGC reads the prior day's state; the other paths read checkpoints for
+   # ozone carryover or the 10-day temperature history when those apply.
+   reads_checkpoint = (biogeochem_flag && (d > 1L || continue_flag)) ||
+                      (O3_damage_flag && (d > 1L || continue_flag)) ||
+                      d > 10L || continue_flag
+   if (!single_site_flag && reads_checkpoint && length(ij) > 0L) {
+      previous_date = to.yyyymmdd(from.yyyymmdd(current_date) - 24)
+      sample_ij = ij[[1L]]
+      sample_checkpoint = sprintf(
+         'temp_data/temp_%s/temp_i%03d_j%03d.RData',
+         previous_date, sample_ij[1L], sample_ij[2L]
+      )
+      print(paste0('Loading checkpoint data, including ', sample_checkpoint,
+                   ' (representative grid cell; ', length(ij) - 1L,
+                   ' other grid cell(s)).'), quote=FALSE)
+   }
    print('Simulating for each lon/lat...', quote=FALSE)
    hist_ij = if (n_core != 1) { 
       if (Sys.info()["sysname"] == 'Windows') {
          cl = makeCluster(getOption("cl.cores", n_core))
-         parLapply(cl = cl, X = ij, fun=f_simulate_ij)
-         stopCluster(cl)
+         tryCatch({
+            # PSOCK workers start with separate global environments. The model
+            # functions read their daily inputs and parameters from globalenv().
+            # Copy those inputs to each worker before sending grid cells.
+            worker_objects = setdiff(ls(envir = globalenv()),
+                                     c('cl', 'nc', 'ij', 'hist_ij', 'hist_grid',
+                                       'output', 'err_hist_ij', 'err_msg',
+                                       'var_list', 'worker_objects'))
+            clusterCall(cl, function(paths, packages) {
+               .libPaths(paths)
+               for (pkg in rev(packages)) {
+                  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+               }
+               NULL
+            }, .libPaths(), .packages())
+            clusterExport(cl, varlist = worker_objects, envir = globalenv())
+            parLapply(cl = cl, X = ij, fun = f_simulate_ij)
+         }, finally = stopCluster(cl))
       } else {
          mclapply(ij, FUN=f_simulate_ij, mc.cores=n_core)
       } 

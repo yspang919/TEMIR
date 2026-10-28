@@ -2,9 +2,13 @@
 .Rhistory
 .RData
 .Ruserdata
+__pycache__/
+*.pyc
 
 # Local outputs and bundled libraries
 TEMIR_run/
+tmp/
+code_v2.0/tmp_code_v2.0/
 lib/
 
 # Large TEMIR input data are not tracked in GitHub

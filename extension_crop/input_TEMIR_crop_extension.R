@@ -9,11 +9,6 @@ initial_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/initial_data/')
 # Directory for storing additional R scripts for the crop model
 crop_module_code_dir = paste0(TEMIR_dir,"extension_crop/")
 
-# Directory for storing soil temperature maps
-# Mandatory, regardless if site-level input is provided
-# Default input: MERRA-2 tavg1_2d_lnd_Nx.nc files
-soilT_data_dir = paste0(TEMIR_dir,'TEMIR_inputs/soilT_map/')
-
 ################################################################################
 
 ### Settings for the simulation of all vegetation ###
@@ -23,19 +18,20 @@ soilT_data_dir = paste0(TEMIR_dir,'TEMIR_inputs/soilT_map/')
 # To simulate PFTs that are not abundant in a geographical location, this value can be changed to 0. However, be aware that this can greatly increase the computation time for regional/global simulations.
 PFT_frac_threshold = 0.01
 
-# Data Source of soil temperature input for the calculation of maintenance respiration ('MERRA2' or 'custom')
-# 'MERRA2' (default): using the soil temperature from MERRA-2 (5 layers of soil temperature)
-# 'custom': using your own soil temperature data (single- or multilayer), the depth of the bottom of each layer must be provided if there are more than one layer
-T_soil_source = 'MERRA2'
+# Data source of mapped soil temperatures for maintenance respiration ('MERRA2' or 'custom-map')
+# 'MERRA2': use soil temperatures from MERRA-2 (5 layers).
+# 'custom-map': read gridded soil temperatures configured in settings_custom_met_inputs.R.
+# Site measurements are a separate optional replacement in settings_1site_inputs.R.
+# CUSTOM meteorology uses its soil-temperature maps by default; other
+# meteorology uses MERRA-2. Set either value explicitly to override this choice.
+T_soil_source = if (met_name == 'CUSTOM') 'custom-map' else 'MERRA2'
 
-# Specify the depth of the bottom of the soil layer of the soil temperature input (in m) (soil T maps)
-# For single-layer soil temperature data input, T_soil_depth does not need to be specified as the calculation of root fraction is not needed.
-# Only applies to soil temperature map input; soil temperature depth from single-site measurements should be specified in settings_1site_inputs.R.
+# MERRA-2 soil-temperature directory and layer-bottom depths (m).
+# For 'custom-map', set the file, variables, and layer depths in
+# settings_custom_met_inputs.R instead.
 if (T_soil_source == 'MERRA2') {
+   soilT_data_dir = paste0(TEMIR_dir, 'TEMIR_inputs/soilT_map/')
    map_TS_meas_depth = c(0.0988, 0.2940, 0.6799, 1.4425, 2.9496)
-} else if (T_soil_source == 'custom') {
-   # map_TS_meas_depth = c(...)
-   # T_soil_depth = NA
 }
 
 # How to calculate the maintenance respiration? ('CLM4.5', or 'custom')
@@ -46,9 +42,9 @@ main_resp_scheme = 'CLM4.5'
 # How to calculate LAI, SAI, and canopy height? ('CLM4.5' or 'custom')
 # 'CLM4.5' (default): LAI is calculated from leaf carbon pool; SAI is calculated from stem carbon pool.
 # 'custom': implement your own methods in plant_physiology.R
-LAI_scheme = 'custom'
+LAI_scheme = 'CLM4.5'
 SAI_scheme = 'CLM4.5'
-canopy_h_scheme = 'custom'
+canopy_h_scheme = 'CLM4.5'
 
 ################################################################################
 
@@ -66,22 +62,10 @@ natveg_C_partit_method = 'custom'
 
 ## How is the planting date of crops determined? ('CLM4.5', 'prescribed-map', 'prescribed-site')
 # 'CLM4.5': The planting date is determined by climate (20-year running mean of crop mature GDD requirement) and 10-day running mean T2m. This method assumes farmers adjust the planting date based on past climate. However, planting dates in the corn belt derived with this method are about 30 days earlier when compared to the USDA record. It is recommended to use the Sack et al. 2010 dataset (or another planting calendar) if shifting crop planting under a changing climate is not a concern.
-# 'prescribed-map': read in a regional/global crop calendar that contains crop planting date (in day of year). By default, the data compiled by Sack et al. (2010) are used, but it is possible to replace them with another crop calendar. Suitable for regional or global simulations when shifts in planting date are not a concern.
-# 'prescribed-site' (default): enter a single value (in day of year) as the planting date. Suitable for single-site/small-scale simulations with a known planting date.
-#  In the Sack et al. (2010) dataset, there are primary and secondary crop growing season for maize and rice.
-#   - crop_growing_season can either be 'primary' and 'secondary'
-
-crop_planting_date_method = 'prescribed-site'
-
-# Specify the directory name that contains the map of planting date (data is imported at PFT_surf_data.R)
-if (crop_planting_date_method == 'prescribed-map') {
-    # Set directory contains a map of planting date
-    crop_calender_map_dir = paste0(TEMIR_dir,'/TEMIR_inputs/crop_calender/Sack2010/')
-    if (exists('crop_growing_season')) {
-        warning("'crop_growing_season' for the Sack planting dataset is declared in both 'input_TEMIR_basic_settings.R' and 'input_TEMIR_biogeochem_extension.R'\nIt is overwritten by the one declared in input_TEMIR_biogeochem_extension.R")
-    }
-    crop_growing_season = 'primary'
-}
+# 'prescribed-map': read a crop/PFT planting-date layer (day of year) from the
+# custom phenology RDS configured in settings_custom_crop_phenology.R.
+# 'prescribed-site': enter a single value (in day of year) as the planting date. Suitable for single-site/small-scale simulations with a known planting date.
+crop_planting_date_method = 'prescribed-map'
 
 # Prescribed planting date for single-site simulations
 if (crop_planting_date_method == 'prescribed-site') {
@@ -91,17 +75,18 @@ if (crop_planting_date_method == 'prescribed-site') {
 
 ## How is the growing degree day (GDD) requirement for crop reaching maturity (GDDmat) determined? ('CLM4.5', 'prescribed-map', 'prescribed-site')
 # 'CLM4.5': GDDmat are derived from 20-year running mean of GDD0, GDD8 and GDD10 (GDDx) as described in the CLM4.5 technical note. This method assumes farmers will adapt to local climate and use seeds with different maturity requirements.
-# 'prescribed-map': read in a regional/global map that contains GDDmat (in growing degree day) for different crops. The default input file contains GDDmat values derived using the planting and harvesting complied by Sack et al (2010). The GDDmat value in the file is the average GDDmat from year 1995 to year 2015 (assuming fixed planting and harvesting date). 
+# 'prescribed-map': select a custom spatial GDDmat layer from the RDS configured
+# in settings_custom_crop_phenology.R.
 # 'prescribed-site' (default): enter a single GDDmat value (in growing degree day). Suitable for single-site simulations with a pre-determined GDDmat/harvesting day.
 
 # Note: there is a slight difference in the definition of mid-growing season between CLM and TEMIR.
 # Mid-growing stage in CLM models is the 'grain-fill' stage (~R3), whereas in this model the mid-growing season in JULES/TEMIR is the 'flowering' stage (~R1).
 # The biomass allocation coefficients from different crop models are therefore calibrated following different phenology.
 
-GDDmat_method = 'prescribed-site'
+GDDmat_method = 'prescribed-map'
 
-# Specify the directory name that contains the GDDmat files
-if (any(GDDmat_method == c('CLM4.5', 'prescribed-map'))) {
+# The CLM4.5 option still reads the legacy GDDx map from this directory.
+if (GDDmat_method == 'CLM4.5') {
     GDDmat_map_dir = paste0(TEMIR_dir, 'TEMIR_inputs/CLM4.5_GDDx_map/')
 }
 
@@ -111,26 +96,42 @@ if (GDDmat_method == 'prescribed-site') {
     prescribed_GDDmat = 1650
 }
 
-## How is the GDD requirement for crop to reach flowering stage GDDrepr determined? ('CLM4.5', 'custom')
-# 'CLM4.5' (default): GDDrepr is a fraction of GDDmat (50% to 70%, depends on crop type)
+## How is the GDD requirement for crop to reach flowering stage GDDrepr determined? ('CLM4.5', 'prescribed-map', 'prescribed-site')
+# 'CLM4.5': GDDrepr is a fraction of GDDmat (50% to 70%, depends on crop type)
+# 'prescribed-map': use the crop/PFT layer of a custom spatial phenology map;
+# an absent array or NA cell can use the fallback in settings_custom_crop_phenology.R.
 # 'prescribed-site': enter a single GDDrepr value (in growing degree day). Suitable for single-site simulations with a pre-determined GDDrepr.
 
-GDDrepr_method = 'prescribed-site'
+GDDrepr_method = 'prescribed-map'
 # Fill in the prescribed GDDrepr value here
 if (GDDrepr_method == 'prescribed-site') {
     # example of an European maize growing season, flowering on 1 Jun
     prescribed_GDDrepr = 503
 }
 
-## How is the GDD requirement for crop emerging from soil GDDemer determined. i.e. when first leaf appears ('CLM4.5', 'custom')
-# 'CLM4.5' (default): GDDemer is a fraction of GDDmat (3% to 5%, depends on crop type)
+## How is the GDD requirement for crop emerging from soil GDDemer determined. i.e. when first leaf appears ('CLM4.5', 'prescribed-map', 'prescribed-site')
+# 'CLM4.5': GDDemer is a fraction of GDDmat (3% to 5%, depends on crop type)
+# 'prescribed-map': use the crop/PFT layer of a custom spatial phenology map;
+# an absent array or NA cell can use the fallback in settings_custom_crop_phenology.R.
 # 'prescribed-site': enter a single GDDemer value (in growing degree day). Suitable for single-site simulations with a pre-determined GDDemer.
 
-GDDemer_method = 'prescribed-site'
+GDDemer_method = 'prescribed-map'
 # Fill in the prescribed GDDemer value here
 if (GDDemer_method == 'prescribed-site') {
     # example of an European maize growing season, emergence on 15 Apr
     prescribed_GDDemer = 36
+}
+
+# A simulation-specific settings file in the working directory takes
+# precedence over the repository template.
+if (any(c(crop_planting_date_method, GDDmat_method,
+          GDDrepr_method, GDDemer_method) == 'prescribed-map')) {
+    custom_phenology_settings_file = if (file.exists('settings_custom_crop_phenology.R')) {
+        'settings_custom_crop_phenology.R'
+    } else {
+        paste0(TEMIR_dir, '/extension_crop/settings_custom_crop_phenology.R')
+    }
+    source(custom_phenology_settings_file)
 }
 
 ## How is the increase of growing degree day GDD calculated? ('CLM4.5', 'custom')
@@ -158,7 +159,7 @@ crop_transloc_scheme = 'JULES'
 ## How is the leaf senescence rate and the timing of senescence parameterized in the model? ('CLM4.5', 'custom')
 # 'CLM4.5' (default): based on the leaf senescence rate described in CLM4.5 Technical Note. Leaves fall at the beginning of the reproductive stage (i.e., GDD >= GDDrepr).
 # 'custom': implement your own leaf senescence scheme in plant_phenology.R. Leaf loss does not necessarily start at the beginning of the reproductive stage. Please also modify the variable 'leaf_senescence_DVI' below if needed.
-crop_leaf_sen_scheme = 'custom'
+crop_leaf_sen_scheme = 'CLM4.5'
 
 
 ## What is the initial leaf carbon per unit area (equivalent to LAI) of crops after emergence?
@@ -259,7 +260,7 @@ if (crop_leaf_sen_scheme != 'custom') leaf_senescence_DVI = NA
 
 
 # Checking simulation option inputs
-if (!any(T_soil_source == c('MERRA2', 'custom'))) stop("Invalid input for 'T_soil_source' in input_TEMIR_crop_extension.R")
+if (!T_soil_source %in% c('MERRA2', 'custom-map')) stop("Invalid input for 'T_soil_source' in input_TEMIR_crop_extension.R")
 if (!any(main_resp_scheme == c('CLM4.5', 'custom'))) stop("Invalid input for 'main_resp_scheme' in input_TEMIR_crop_extension.R")
 if (!any(LAI_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'LAI_scheme' in input_TEMIR_crop_extension.R")
 if (!any(SAI_scheme == c('CLM4.5','custom'))) stop("Invalid input for 'SAI_scheme' in input_TEMIR_crop_extension.R")
@@ -269,8 +270,8 @@ if (!any(natveg_C_partit_method == c('CLM4.5','custom'))) stop("Invalid input fo
 if (!any(crop_planting_date_method == c('CLM4.5','prescribed-map','prescribed-site'))) stop("Invalid input for 'crop_planting_date_method' in input_TEMIR_crop_extension.R")
 
 if (!any(GDDmat_method == c('CLM4.5','prescribed-map','prescribed-site'))) {stop("Invalid input for 'GDDmat_method' in input_TEMIR_crop_extension.R")}
-if (!any(GDDrepr_method == c('CLM4.5','prescribed-site'))) {stop("Invalid input for 'GDDrepr_method' in input_TEMIR_crop_extension.R")}
-if (!any(GDDemer_method == c('CLM4.5','prescribed-site'))) {stop("Invalid input for 'GDDemer_method' in input_TEMIR_crop_extension.R")}
+if (!any(GDDrepr_method == c('CLM4.5','prescribed-map','prescribed-site'))) {stop("Invalid input for 'GDDrepr_method' in input_TEMIR_crop_extension.R")}
+if (!any(GDDemer_method == c('CLM4.5','prescribed-map','prescribed-site'))) {stop("Invalid input for 'GDDemer_method' in input_TEMIR_crop_extension.R")}
 if (!any(GDD_calculation_method == c('CLM4.5', 'JULES', 'custom'))) {stop("Invalid input for 'GDD_calculation_method' in input_TEMIR_crop_extension.R")}
 
 if (!any(crop_C_partit_scheme == c('CLM4.5','JULES','custom'))) stop("Invalid input for 'crop_C_partit_method' in input_TEMIR_crop_extension.R")

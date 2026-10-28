@@ -198,8 +198,12 @@ g1_med_table = c(NA, 2.35, 2.35, 2.35, 4.12, 4.12, 4.45, 4.45, 4.45, 4.7, 4.7, 4
 print('Loading surface data...', quote=FALSE)
 
 # New CLM surface input - include crop coverage in the tropical region
-# filename = paste0(surf_data_dir, 'surfdata_map/surfdata_1.9x2.5_mp24_simyr2000_c130419.nc')
 filename = paste0(surf_data_dir, 'surfdata_map/surfdata_1.9x2.5_mp24_simyr2000_c130419_CLM5crop_coverage.nc')
+if (!file.exists(filename)) {
+   filename = paste0(surf_data_dir, 'surfdata_map/surfdata_1.9x2.5_mp24_simyr2000_c130419.nc')
+   if (!file.exists(filename)) stop('No CLM surface data file found in ', surf_data_dir, 'surfdata_map/')
+   print(paste0('Using available CLM surface data file: ', filename), quote=FALSE)
+}
 
 nc = nc_open(filename)
 # Dimensions:
@@ -669,167 +673,46 @@ if (!file.exists(filename)) {
    f_load_grid_cache(filename, lon, lat)
 }
 
+# Retain the CLM fractions when the custom map is only a simulation mask.
+PFT_frac_surface = PFT_frac
+custom_PFT_frac_ipft = integer()
+if (PFT_frac_method == 'custom-map') {
+   source(paste0(code_dir, 'read_custom_PFT_frac.R'))
+   custom_PFT_frac_result = f_apply_custom_PFT_frac(
+      PFT_frac = PFT_frac, lon = lon, lat = lat,
+      path = custom_PFT_frac_file,
+      layer_to_ipft = custom_PFT_frac_layer_to_ipft
+   )
+   PFT_frac = custom_PFT_frac_result$PFT_frac
+   custom_PFT_frac_ipft = custom_PFT_frac_result$ipft
+   if (custom_PFT_frac_surface_method == 'custom-map') {
+      if (any(apply(PFT_frac, c(1, 2), sum, na.rm = TRUE) > 1 + 1e-6)) {
+         stop('Custom PFT fractions exceed one in a grid cell; map other PFTs or use CLM for surface calculations')
+      }
+      PFT_frac_surface = PFT_frac
+   }
+   rm(custom_PFT_frac_result)
+   print(paste0('Applied custom PFT fractions from ', custom_PFT_frac_file), quote=FALSE)
+}
+
 cat('\n')
 
 ################################################################################
-### Regridding planting and harvest date data from Sack et al. (2010): (Pang and Sadiq, Jun 2019)
+### Custom crop phenology map
 ################################################################################
 
-# Regridding the planting and harvesting date data if simulations require a map of prescribed planting date
-# The resolution of the default planting date map from Sack et al. 2010 is 0.5 x 0.5
-
-
-if (biogeochem_flag && crop_planting_date_method == 'prescribed-map') {
-    
-    if (dlon < 0.5 || dlat < 0.5) {
-        print('The Sack et al. crop calender has a resolution of 0.5x0.5. Thw simulation resolution is higher than the data resolution, regridding is not required.')
-    }
-    
-    if (dlon == 0.5 && dlat == 0.5) {
-        # Simulation resolution is the same as the data, can be read in directly from .nc
-        filename = crop_calender_ncname
-        nc = nc_open(paste0(crop_calender_map_dir, filename))
-        prescribed_planting_date_Sack = ncvar_get(nc, 'planting')
-        prescribed_harvesting_date_Sack = ncvar_get(nc, 'harvest')
-        nc_close(nc)
-    } else {
-        # Like the prescribed LAI and soil data, read in the RData contains the regridded data if it exists. Otherwise, regrid the nc data to a suitable resolution
-        filename = paste0(crop_calender_map_dir, 'crop_planting_harvesting_Sack_',dlat,'x',dlon,'.RData')
-        
-        if (!file.exists(filename)) {
-            # Read in the nc file and regrid the data to the simulation resolution
-            nc_filename = crop_calender_ncname
-            nc = nc_open(paste0(crop_calender_map_dir, nc_filename))
-            tmp_planting_date_Sack_nc = ncvar_get(nc, 'planting')
-            tmp_harvesting_date_Sack_nc = ncvar_get(nc, 'harvest')
-            
-            lat_Sack = ncvar_get(nc, 'lat')
-            lon_Sack = ncvar_get(nc, 'lon')
-            nc_close(nc)
-            
-            lat_diff_sack = lat_Sack[1] - lat_Sack[2]
-            lat_diff = lat[1] - lat[2]
-            
-            lon_diff_sack = lon_Sack[1] - lon_Sack[2]
-            lon_diff = lon[1] - lon[2]
-            
-            if (lat_diff_sack * lat_diff < 0) {
-                print('Fliping the order of lat_Sack for sp.regrid()')
-                lat_Sack = rev(lat_Sack)
-                tmp_planting_date_Sack_nc[,(1:length(lat_Sack)),] = tmp_planting_date_Sack_nc[,rev((1:length(lat_Sack))),]
-                tmp_harvesting_date_Sack_nc[,(1:length(lat_Sack)),] = tmp_harvesting_date_Sack_nc[,rev((1:length(lat_Sack))),]
-                
-            }
-            
-            if (lon_diff_sack * lon_diff < 0) {
-                print('Fliping the order of lon_Sack for sp.regrid()')
-                lon_Sack = rev(lon_Sack)
-                tmp_planting_date_Sack_nc[(1:length(lon_Sack)),,] = tmp_planting_date_Sack_nc[rev((1:length(lon_Sack))),,]
-                tmp_harvesting_date_Sack_nc[(1:length(lon_Sack)),,] = tmp_harvesting_date_Sack_nc[rev((1:length(lon_Sack))),,]
-            }
-            
-            crop_name_vec = c('maize (primary growing season)', 'wheat', 'winter wheat', 'soybean', 'rice (primary growing season)', 'rice (secondary growing season)', 'maize (secondary growing season)')
-            prescribed_planting_date_Sack = array(data = NA, dim = c(length(lon), length(lat), length(crop_name_vec)))
-            prescribed_harvesting_date_Sack = array(data = NA, dim = c(length(lon), length(lat), length(crop_name_vec)))
-            for (z in seq(crop_name_vec)){
-                tmp_plant = sp.regrid(spdata = tmp_planting_date_Sack_nc[,,z], lon.in = lon_Sack, lat.in = lat_Sack, lon.out = lon, lat.out = lat, method = 'mode')
-                tmp_har = sp.regrid(spdata = tmp_harvesting_date_Sack_nc[,,z], lon.in = lon_Sack, lat.in = lat_Sack, lon.out = lon, lat.out = lat, method = 'mode')
-                prescribed_planting_date_Sack[,,z] = tmp_plant
-                prescribed_harvesting_date_Sack[,,z] = tmp_har
-                print(paste0('Finished regridding planting and harvesting date for ', crop_name_vec[z]))
-            }
-            
-            save(list = c('lon', 'lat', 'prescribed_planting_date_Sack', 'prescribed_harvesting_date_Sack', 'crop_name_vec'), file = filename)
-            rm(tmp_plant , tmp_har, crop_name_vec, lon_Sack, lat_Sack, lon_diff, lat_diff, z)
-        } else {
-            print(paste0('Crop calendar with a suitable resolution is already existed'), quote = FALSE)
-            print(paste0('Loading ', filename, ' ...'), quote = FALSE)
-            load(filename)
-        }
-    }
-    
-}
-
-################################################################################
-### Regridding GDDmat derived from Sack et al. (2010) crop calendar 
-################################################################################
-
-# Regridding the growing degree day requirements for harvesting (GDDmat) if simulations require a map of prescribed GDDmat
-# TODO: automatically determine file resolution of the input file? Then no need to hard code for comparing simulation resolution and file resolution.
-
-if (biogeochem_flag) {
-    if (GDDmat_method == 'prescribed-map') {
-        if (dlon == 360/540 && dlat == 0.5) {
-            # The simulation resolution is the same as the input
-            filename = GDDmat_map_ncfile
-            nc = nc_open(paste0(GDDmat_map_dir, filename))
-
-            GDDmat_maize_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,1]
-            GDDmat_soybean_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,2]
-            GDDmat_springwheat_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,3]
-            GDDmat_winterwheat_map = ncvar_get(nc, 'Sack_crop_calendar_GDDmat')[,,4]
-            nc_close(nc)
-        } else if (dlon < 360/540 || dlat < 0.5) {
-            warning('The GDDmat map has a resolution of 0.667x0.5. The simulation resolution is higher than the data resolution. Regridding is not needed.')
-        } else {
-            filename = paste0('regridded_crop_GDDmat_Sack_',dlon,'x',dlat,'.RData')
-            if (!file.exists(paste0(GDDmat_map_dir, filename))) {
-                print('Regridding GDDmat map')
-                # Regrid the nc input
-                nc_filename = GDDmat_map_ncfile
-                nc = nc_open(paste0(GDDmat_map_dir, nc_filename))
-                tmp_GDDmat_mean = ncvar_get(nc, 'GDDmat_mean') # dim() = 540lon x 361lat x 4crops
-                tmp_GDDmat_sd = ncvar_get(nc, 'GDDmat_sd') # this variable "may be" useful for adjusting GDDmat in a particular region (e.g., reduce the matuirty requirement by say: GDDmat = GDDmat_mean - GDDmat_sd)
-                lat_Sack = ncvar_get(nc, 'lat')
-                lon_Sack = ncvar_get(nc, 'lon')
-                nc_close(nc)
-                
-                lat_diff_sack = lat_Sack[1] - lat_Sack[2]
-                lat_diff = lat[1] - lat[2]
-                
-                lon_diff_sack = lon_Sack[1] - lon_Sack[2]
-                lon_diff = lon[1] - lon[2]
-                
-                if (lat_diff_sack * lat_diff < 0) {
-                    print('Fliping the order of lat_Sack for sp.regrid()')
-                    lat_Sack = rev(lat_Sack)
-                    tmp_GDDmat_mean[,(1:length(lat_Sack)),] = tmp_GDDmat_mean[,rev((1:length(lat_Sack))),]
-                    tmp_GDDmat_sd[,(1:length(lat_Sack)),] = tmp_GDDmat_sd[,rev((1:length(lat_Sack))),]
-                }
-                
-                if (lon_diff_sack * lon_diff < 0) {
-                    print('Fliping the order of lon_Sack for sp.regrid()')
-                    lon_Sack = rev(lon_Sack)
-                    tmp_GDDmat_mean[(1:length(lon_Sack)),,] = tmp_GDDmat_mean[rev((1:length(lon_Sack))),,]
-                    tmp_GDDmat_sd[(1:length(lon_Sack)),,] = tmp_GDDmat_sd[rev((1:length(lon_Sack))),,]
-                }
-                
-                crop_name_vec = c('maize', 'soybean', 'springwheat', 'winterwheat')
-                Sack_derived_GDDmat_mean = array(data = NA, dim = c(length(lon), length(lat), length(crop_name_vec)))
-                Sack_derived_GDDmat_sd = array(data = NA, dim = c(length(lon), length(lat), length(crop_name_vec)))
-                
-                for (z in seq(crop_name_vec)) {
-                    tmp_mean = sp.regrid(spdata = tmp_GDDmat_mean[,,z], lon.in = lon_Sack, lat.in = lat_Sack, lon.out = lon, lat.out = lat, method = 'mode')
-                    tmp_sd = sp.regrid(spdata = tmp_GDDmat_sd[,,z], lon.in = lon_Sack, lat.in = lat_Sack, lon.out = lon, lat.out = lat, method = 'mode')
-                    Sack_derived_GDDmat_mean[,,z] = tmp_mean
-                    Sack_derived_GDDmat_sd[,,z] = tmp_sd
-                    assign(x = paste0('GDDmat_',crop_name_vec[z],'_map'), value = tmp_mean)
-                    print(paste0('Finished regridding derived GDDmat for ', crop_name_vec[z]))
-                }
-                
-                save(list = c('lon', 'lat', 'Sack_derived_GDDmat_mean', 'Sack_derived_GDDmat_sd', 'crop_name_vec'), file = paste0(GDDmat_map_dir, filename))
-                
-                rm(z, tmp_mean, tmp_sd, lat_Sack, lon_Sack, lat_diff_sack, lon_diff_sack, tmp_GDDmat_mean, tmp_GDDmat_sd, nc_filename)
-            } else {
-                print(paste0('GDDmat map with suitable resolution is already existed'), quote = FALSE)
-                print(paste0('Loading ', filename, ' ...'), quote = FALSE)
-                load(paste0(GDDmat_map_dir, filename))
-                for (z in seq(crop_name_vec)) {
-                    assign(x = paste0('GDDmat_',crop_name_vec[z],'_map'), value = Sack_derived_GDDmat_mean[,,z])
-                }
-            }
-        }
-    }
+if (biogeochem_flag && any(c(crop_planting_date_method, GDDmat_method,
+                              GDDrepr_method, GDDemer_method) == 'prescribed-map')) {
+    source(paste0(TEMIR_dir, '/extension_crop/read_custom_crop_phenology.R'))
+    required_custom_fields = c(
+        if (crop_planting_date_method == 'prescribed-map') 'planting_date',
+        if (GDDmat_method == 'prescribed-map') 'GDDmat'
+    )
+    custom_phenology_map = f_read_custom_crop_phenology(
+        path = custom_phenology_map_file, lon = lon, lat = lat,
+        pft_map = custom_phenology_pft_map,
+        required_fields = required_custom_fields
+    )
 }
 
 ################################################################################
@@ -896,13 +779,13 @@ if (LAI_data_flag) {
             print(paste0('Regridding user-defined LAI for year ', LAI_required_years[iyear], '...'), quote=FALSE)
             LAI_data_mon = NaN.to.zero(sp.regrid(spdata=zero.to.NaN(LAI_data_mon), lon.in=lon_LAI, lat.in=lat_LAI, lon.out=lon, lat.out=lat))
             # LAI_data_mon above is LAI per unit area of vegetated land, but we should use LAI per unit grid cell area for rescaling. We correct it by multiplying it with the fraction of vegetated land in a grid cell (Tai, Apr 2020):
-            veg_frac = apply(PFT_frac[,,-1], MARGIN=1:2, FUN=sum)
+            veg_frac = apply(PFT_frac_surface[,,-1], MARGIN=1:2, FUN=sum)
             LAI_data_mon = LAI_data_mon*array(veg_frac, dim=dim(LAI_data_mon))
             # Revised above: Tai (Apr 2020)
 
             # Rescale CLM PFT-level monthly LAI according to user-defined LAI:
             # Define scaling factor:
-            Z = LAI_data_mon/zero.to.NaN(apply(LAI_mon_PFT*array(data = PFT_frac, dim = c(dim(PFT_frac), 12)), MARGIN = c(1,2,4), FUN = sum))
+            Z = LAI_data_mon/zero.to.NaN(apply(LAI_mon_PFT*array(data = PFT_frac_surface, dim = c(dim(PFT_frac_surface), 12)), MARGIN = c(1,2,4), FUN = sum))
             Z[which(is.na(Z))] = 1
             # Z[which(Z > 10)] = 10   # Max it out at a factor of 10
             Z[which(Z > 5)] = 5     # Max it out at a factor of 5 (Tai, Apr 2020)
@@ -1013,30 +896,43 @@ if (!exist_LAI_data && !biogeochem_flag) {
 ### Load hourly surface ozone concentration field:
 ################################################################################
 
-if (O3_damage_flag & !O3_fixed_flag & (use_site_obs_flag && !using_site_o3_flag)) {
+if (O3_damage_flag && !O3_fixed_flag && !using_site_o3_flag) {
 
    # Vector of simulation years:
    # This is also set above if LAI_data_flag=TRUE.
    if (!exists('year_vec')) year_vec = as.numeric(unique(substr(make.date.vec(start.date=start_date, end.date=end_date), 1, 4)))
 
-   # Set surface ozone field path:
-   # Please make sure among the available years for O3 data, there are no missing years in between.
-   O3_nc_files = list.files(O3_data_dir, pattern = paste0('^', O3_subn1, '.*', O3_subn2, '$'))
-   O3_avail_years = sort(as.numeric(str_remove(str_remove(O3_nc_files, pattern = paste0('^', O3_subn1)), pattern = paste0(O3_subn2, '$'))))
+   # Find annual ozone maps. Missing simulation years use the nearest available
+   # year with the same leap-year length.
+   O3_nc_files = list.files(O3_data_dir)
+   O3_nc_files = O3_nc_files[startsWith(O3_nc_files, O3_subn1) &
+                              endsWith(O3_nc_files, O3_subn2)]
+   O3_year_strings = substr(O3_nc_files, nchar(O3_subn1) + 1L,
+                             nchar(O3_nc_files) - nchar(O3_subn2))
+   O3_avail_years = sort(as.integer(O3_year_strings[grepl('^[0-9]{4}$', O3_year_strings)]))
    print(paste0('Available years for O3 data: ', paste(O3_avail_years, collapse = ', ')), quote = FALSE)
 
    if (length(O3_avail_years) == 0) stop('Surface O3 data are not found!') else {
       # Match simulation years to O3 data available:
       O3_used_years = year_vec
-      # Checking if O3 data are available for the simulation year:
-      if (min(year_vec) < min(O3_avail_years) | max(year_vec) > max(O3_avail_years)) {
-         ind_start_yrs = which(year_vec < min(O3_avail_years))
-         O3_used_years[ind_start_yrs] = O3_avail_years[1]
-         ind_end_yrs = which(year_vec > max(O3_avail_years))
-         O3_used_years[ind_end_yrs] = tail(O3_avail_years, 1)
-         # Print note:
-         if (length(c(ind_start_yrs, ind_end_yrs)) > 1) out_string = 'years' else out_string = 'year'
-         print(paste0('Simulation ', out_string, ' ', paste(year_vec[c(ind_start_yrs, ind_end_yrs)], collapse = ', '), ' does not have the corresponding O3 data so closest available year(s) are used.'), quote = FALSE)
+      # Use the closest available year with the same number of calendar hours.
+      # A leap-year run cannot index a 8760-hour non-leap-year ozone file.
+      O3_used_years = vapply(year_vec, function(y) {
+         year_hours = function(z) as.integer(
+            as.Date(sprintf('%04d-01-01', z + 1L)) -
+            as.Date(sprintf('%04d-01-01', z))) * 24L
+         candidates = O3_avail_years[vapply(O3_avail_years, year_hours,
+                                            integer(1)) == year_hours(y)]
+         if (!length(candidates)) {
+            stop('No ozone file with the same calendar length as simulation year ', y)
+         }
+         candidates[which.min(abs(candidates - y))]
+      }, integer(1))
+      if (any(O3_used_years != year_vec)) {
+         print(paste0('O3 year substitutions: ', paste(
+            paste0(year_vec[O3_used_years != year_vec], ' -> ',
+                   O3_used_years[O3_used_years != year_vec]), collapse = ', ')),
+            quote = FALSE)
       }
    }
 
@@ -1046,19 +942,8 @@ if (O3_damage_flag & !O3_fixed_flag & (use_site_obs_flag && !using_site_o3_flag)
    # Load hourly ozone field:
    filename = paste0(O3_data_dir, O3_subn1, as.character(O3_used_years[1]), O3_subn2)
    print(paste0('Loading surface O3 concentrations from ', filename, '...'), quote=FALSE)
-   nc = nc_open(filename)
-   lon_O3 = ncvar_get(nc, unname(O3_dim_vec['longitude']))
-   lat_O3 = ncvar_get(nc, unname(O3_dim_vec['latitude']))
-   # Surface O3 concentration (ppbv):
-   O3_hourly = ncvar_get(nc, O3_array_name)
-   nc_close(nc)
-
-   # Regrid to model resolution if input resolution is not consistent:
-   if (sum(lon != lon_O3) > 0 | sum(lat[2:(length(lat)-1)] != lat_O3[2:(length(lat_O3)-1)]) > 0) {
-      # Regrid to model resolution:
-      print(paste0('Regridding hourly O3 concentrations for year ', as.character(O3_used_years[1]), '...', quote=FALSE))
-      O3_hourly = sp.regrid(spdata=O3_hourly, lon.in=lon_O3, lat.in=lat_O3, lon.out=lon, lat.out=lat)
-   }
+   O3_hourly = f_read_o3_year(filename, O3_array_name, O3_dim_vec,
+                               O3_used_years[1], lon, lat)
    
 }
 
@@ -1163,7 +1048,7 @@ if (!is.null(drydep_scheme)) {
 disp_on_z0m = array(NaN, dim=c(length(lon), length(lat)))
 for (i in 1:length(lon)) {
    for (j in 1:length(lat)) {
-      disp_on_z0m[i,j] = sum(displar * htop * PFT_frac[i,j,], na.rm=TRUE) / sum(z0mr * htop * PFT_frac[i,j,], na.rm=TRUE)
+      disp_on_z0m[i,j] = sum(displar * htop * PFT_frac_surface[i,j,], na.rm=TRUE) / sum(z0mr * htop * PFT_frac_surface[i,j,], na.rm=TRUE)
    }
 }
 disp_on_z0m[which(is.na(disp_on_z0m))] = 0

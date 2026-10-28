@@ -29,14 +29,24 @@ stopifnot(inherits(try(f_load_grid_cache(grid_file, lon + 0.5, lat,
 config = new.env(parent = globalenv())
 config$met_data_dir = test_dir
 config$biogeochem_flag = TRUE
+config$T_soil_source = 'custom-map'
 sys.source('code_v2.0/settings_custom_met_inputs.R', envir = config)
-stopifnot(config$custom_wind_input == 'speed')
+stopifnot(config$custom_wind_input == 'components')
 stopifnot(config$custom_pressure_input == 'surface')
-stopifnot(config$T_soil_source == 'custom')
+stopifnot(config$custom_met_vars[['PS']] == 'sp')
+stopifnot(config$T_soil_source == 'custom-map')
 stopifnot(identical(names(config$custom_soil_temperature_vars),
-                    paste0('TSOIL', 1:5)))
-stopifnot(length(config$map_TS_meas_depth) == 5)
+                    paste0('TSOIL', 1:4)))
+stopifnot(length(config$map_TS_meas_depth) == 4)
 stopifnot(grepl('MERRA2.20150101.CN.2x25.nc4$', config$custom_static_file))
+
+config_merra_soil = new.env(parent = globalenv())
+config_merra_soil$biogeochem_flag = TRUE
+config_merra_soil$T_soil_source = 'MERRA2'
+sys.source('code_v2.0/settings_custom_met_inputs.R', envir = config_merra_soil)
+stopifnot(config_merra_soil$T_soil_source == 'MERRA2')
+stopifnot(!exists('custom_soil_temperature_vars', envir = config_merra_soil,
+                  inherits = FALSE))
 
 config_without_crop = new.env(parent = globalenv())
 config_without_crop$met_data_dir = test_dir
@@ -49,8 +59,13 @@ surface_speed = f_custom_met_columns(names_to_read, config$custom_met_vars,
                                       'speed', 'surface')
 sea_level_components = f_custom_met_columns(names_to_read, config$custom_met_vars,
                                              'components', 'sea_level')
-stopifnot(identical(unname(surface_speed[c(2, 5)]), c('WS', 'PS')))
+surface_components = f_custom_met_columns(names_to_read, config$custom_met_vars,
+                                           config$custom_wind_input,
+                                           config$custom_pressure_input)
+stopifnot(identical(unname(surface_speed[c(2, 5)]), c('WS', 'sp')))
 stopifnot(all(is.na(surface_speed[c(3, 4, 6)])))
+stopifnot(identical(unname(surface_components[c(3, 4, 5)]),
+                    c('U10M', 'V10M', 'sp')))
 stopifnot(identical(unname(sea_level_components[c(3, 4, 6)]),
                     c('U10M', 'V10M', 'SLP')))
 stopifnot(all(is.na(sea_level_components[c(2, 5)])))
