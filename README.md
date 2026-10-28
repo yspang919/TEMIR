@@ -9,7 +9,7 @@ The default meteorological inputs for TEMIR are from NASA/GMAO [MERRA-2](http://
 - 18 Jun 2019, v1.1; base plant-ecophysiological model with ozone dry deposition module
 - 16 Jul 2026, v2.0; crop carbon-vegetation model with support for site-level meteorological, LAI, and ozone inputs for single-site simulations
 
-- 28 Oct 2026, v2.0; support for custom gridded meteorology, PFT fractions, and crop phenology inputs for regional crop simulations
+- 28 Oct 2026, v2.01; support for custom gridded meteorology, PFT fractions, and crop phenology inputs for regional crop simulations
 
 ## Getting started
 The following components are required to run the model. Please refer to the TEMIR v2.0 manual after cloning the repository.
