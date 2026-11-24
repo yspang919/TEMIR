@@ -575,6 +575,11 @@ f_ozone_impact = function(O3_conc, g_s, g_b, g_ah, P_atm=101325, theta_atm=298.1
         if (plant_group == 'C3_grass' | plant_group == 'C4_grass') O3_flux_th = 5.0 else O3_flux_th = 1.6
         # Testing Felix's parameter
         if (sensitivity == 'custom-soybean') {O3_flux_th = 15}
+        # Xu et al. (2025), Table 5: arithmetic mean of high/low parameter
+        # values, chosen for this TEMIR option (not a third calibrated profile).
+        # https://doi.org/10.5194/gmd-18-7257-2025
+        if (sensitivity == 'custom-rice') {O3_flux_th = 7.5}
+
     	O3_flux_crit = max(c(0, (O3_flux - O3_flux_th)), na.rm=TRUE)
         
 
@@ -594,9 +599,11 @@ f_ozone_impact = function(O3_conc, g_s, g_b, g_ah, P_atm=101325, theta_atm=298.1
             if (plant_group == 'C4_grass') a = 0.13
             if (plant_group == 'shrub') a = 0.03
             if (a == 0) stop('plant_group is not correctly specified!')
-	} else if (sensitivity == 'custom-soybean') {
-	    # Felix's parameters
-	    a = 0.5
+	    } else if (sensitivity == 'custom-soybean') {
+	        # Felix's parameters
+	        a = 0.5
+        } else if (sensitivity == 'custom-rice') {
+            a = 0.95  # mean of Xu's high and low sensitivity for rice
         } else {
             stop('sensitivity is not correctly specified!')
         }

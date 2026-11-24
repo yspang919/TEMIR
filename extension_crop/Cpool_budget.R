@@ -10,7 +10,7 @@
 ################################################################################
 
 f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_decid,
-                            is_maize, is_soybean, is_springwheat, is_winterwheat,
+                            is_maize, is_soybean, is_springwheat, is_winterwheat, is_rice = FALSE,
                             grain_filling_flag, harvesting_flag, DVI, astem,
                             leaf_C_prev, leaf_C_biomass_partitioning_flux_gCm2s1, leaf_C_loss_flux_gCm2s1, seedC_to_leafC_flux_gCm2s1 = NULL,
                             livestem_C_prev, livestem_C_biomass_partitioning_flux_gCm2s1, livestem_C_loss_flux_gCm2s1,
@@ -71,7 +71,7 @@ f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_de
   # Crop retranslocation
   if (is_crop) {
     if (crop_transloc_scheme == 'JULES') {
-	crop_retrans_result = f_crop_retranslocation_JULES(is_maize = is_maize, is_springwheat = is_springwheat, is_winterwheat = is_winterwheat, is_soybean = is_soybean,
+	crop_retrans_result = f_crop_retranslocation_JULES(is_maize = is_maize, is_springwheat = is_springwheat, is_winterwheat = is_winterwheat, is_soybean = is_soybean, is_rice = is_rice,
 							   # retrans_DVI = 1.5, retrans_astem = 0.01,
 							   grainC = grain_C,
 							   leafC = leaf_C, leafC_senesc_flux = leaf_C_loss_flux_gCm2s1,

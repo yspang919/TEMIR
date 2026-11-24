@@ -7,7 +7,7 @@
 # Add a flag indicates crop is harvested due to the growing season is too long? When this happen, LAI and crop yield are very strange... This could help diagnosis
 
 f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
-                            is_maize, is_springwheat, is_winterwheat, is_soybean, 
+                            is_maize, is_springwheat, is_winterwheat, is_soybean, is_rice = FALSE,
                             leafC, livestemC, livestemresvC, finerootC, grainC, LAI, SAI,
                             GDD_T2m, GDD_Tsoil, GDDmat, GDDrepr, GDDemer, 
                             crop_living_flag, crop_planting_flag, leaf_emer_flag, grain_filling_flag, harvesting_flag,
@@ -21,9 +21,11 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
     day_per_year = if (leap) 366 else 365 
     
     current_jday = date.to.day(current_date)
+    if (is_rice) rice_parameters = f_rice_JULES_parameters()
     GDD_update = f_crop_GDD_update(maize_flag = is_maize, soybean_flag = is_soybean, springwheat_flag = is_springwheat, winterwheat_flag = is_winterwheat,
                                    GDD_T_2m_prev = GDD_T2m, GDD_T_soil_prev = GDD_Tsoil, today_T_soil = T_soil, today_T_2m = T2m, 
-                                   GDD_base_T = GDD_baseT, GDD_max_increase = GDD_maxIncrease, crop_live_flag = crop_living_flag)
+                                   GDD_base_T = GDD_baseT, GDD_max_increase = GDD_maxIncrease, crop_live_flag = crop_living_flag,
+                                   rice_flag = is_rice)
     GDD_T2m = GDD_update$GDD_T_2m
     GDD_Tsoil = GDD_update$GDD_T_soil
     
@@ -92,12 +94,21 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
             } else if (GDDmat_method == 'prescribed-map') {
                 GDDmat = GDDmat_map_value
             } else if (GDDmat_method == 'CLM4.5') {
+                # The legacy option name covers imported CLM5 crop traits too.
+                # CLM5 Tech Note, Eq. (2.26.2): rice uses GDD0, capped by
+                # hybgdd (2100 in the downloaded CLM5 rice parameter rows).
+                # https://escomp.github.io/CTSM/release-clm5.0/tech_note/Crop_Irrigation/CLM50_Tech_Note_Crop_Irrigation.html
+                if (is_rice) {
+                    if (length(GDD0_20yr) != 1L || !is.finite(GDD0_20yr))
+                        stop('CLM rice maturity requires a finite GDD0_20yr climate value')
+                    GDDmat = min(GDD0_20yr, hybgdd)
+                }
                 if (is_maize) GDDmat = max(950, min(GDD8_20yr * 0.85, hybgdd))
                 if (is_springwheat) GDDmat = min(GDD0_20yr, hybgdd)
                 if (is_soybean) GDDmat = min(GDD10_20yr, hybgdd)
                 # There is no winter wheat model in CLM4.5
             }
-            
+
             if (GDDrepr_method == 'prescribed-site') {
                 # It is an input at 'input_TEMIR_crop_extension.R'
                 GDDrepr = prescribed_GDDrepr # prescribed_GDD_repr??
@@ -113,6 +124,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                     GDD_repr_factor = min(max(GDD_repr_factor, 0.55), 0.65)
                     GDDrepr = GDD_repr_factor * GDDmat
                 } else {
+                    # Includes rice grnfill imported from CLM5 (approximately .4).
                     GDDrepr = repr_GDDfrac * GDDmat
                 }
             } else {
@@ -127,6 +139,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
             } else if (GDDemer_method == "CLM4.5" ||
                        (GDDemer_method == 'prescribed-map' &&
                         custom_phenology_optional_fallback[['GDDemer']] == 'CLM4.5')) {
+                # Includes rice lfemerg imported from CLM5 (approximately .01).
                 GDDemer = emer_GDDfrac * GDDmat
             } else {
                 stop('Missing prescribed-map GDDemer and fallback is set to error')
@@ -270,6 +283,7 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                 if (is_maize) {leaf_senescence_DVI = 1.0} # calibrated value = 1.0 ... now try 0.4
                 if (is_soybean) {leaf_senescence_DVI = 1.2}  # calibrated value = 1.2 ... now try 1.0
                 if (is_winterwheat || is_springwheat) {leaf_senescence_DVI = 1.5}  # not calibrated
+                if (is_rice) leaf_senescence_DVI = rice_parameters$senescence$DVI_onset
                 
                 if (DVI >= leaf_senescence_DVI) {
                     
@@ -285,6 +299,12 @@ f_crop_phenology = function(T_10_d, T_min_10_d, T_soil, T2m,
                     leaf_sens_rate_day = 0
                     if (is_maize) {leaf_sens_rate_day = 2E-4 * day_since_crop_senescence^1.05}
                     if (is_soybean) {leaf_sens_rate_day = 2E-3 * day_since_crop_senescence^0.6}
+                    if (is_rice) {
+                        # Xu (2025), Table 3 / Sect. 3.1.3; cap daily loss to
+                        # available leaf carbon (preserves nonnegative pools).
+                        leaf_sens_rate_day = min(1, rice_parameters$senescence$mu *
+                            (DVI - leaf_senescence_DVI)^rice_parameters$senescence$nu)
+                    }
                     
                     leaf_C_loss_flux = (leaf_sens_rate_day/86400) * leafC
                 }
@@ -348,7 +368,7 @@ f_litter_to_soil_fluxes = function(){
     
 }
 
-f_crop_GDD_update = function(maize_flag, soybean_flag, springwheat_flag, winterwheat_flag,
+f_crop_GDD_update = function(maize_flag, soybean_flag, springwheat_flag, winterwheat_flag, rice_flag = FALSE,
                              GDD_T_2m_prev, GDD_T_soil_prev, today_T_soil, today_T_2m, 
                              GDD_base_T, GDD_max_increase, 
                              crop_live_flag){
@@ -370,6 +390,20 @@ f_crop_GDD_update = function(maize_flag, soybean_flag, springwheat_flag, winterw
         if (maize_flag) {T_b = 8; T_o = 30; T_m = 42}
         if (soybean_flag) {T_b = 10; T_o = 30; T_m = 40}  # modified T_b from 5 to 10 for soybean
         if (springwheat_flag | winterwheat_flag) {T_b = 0; T_o = 20; T_m = 30}
+        # Optional rice support: FALSE by default, including runs without rice.
+        # Rice JULES source policy: use Xu et al. (2025) where reported;
+        # otherwise use the rice defaults in Osborne et al. (2015), with
+        # parameter-specific attribution (never infer a wheat fallback).
+        # Xu et al. (2025), Sect. 3.1.2, explicitly retains these three
+        # development temperatures from Osborne et al. (2015); units are degC.
+        # https://doi.org/10.5194/gmd-18-7257-2025
+        # https://doi.org/10.5194/gmd-8-1139-2015
+        # These are GDD cardinal temperatures, separate from CLM5 baset and
+        # from photosynthesis temperature parameters in Xu et al.'s Table 2.
+        if (rice_flag) {
+            rice_development = f_rice_JULES_parameters()$development
+            T_b = rice_development$T_b; T_o = rice_development$T_o; T_m = rice_development$T_m
+        }
         
         GDD_soil_increase = ifelse(test = T_soil_degC < T_b | T_soil_degC >= T_m, yes = 0, 
                                    no = ifelse(test = T_soil_degC <= T_o, yes = T_soil_degC - T_b, 

@@ -19,7 +19,7 @@ f_stress_deciduous_allocation_fluxes = function(){
 }
 
 f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
-                                    is_maize, is_springwheat, is_winterwheat, is_soybean,
+                                    is_maize, is_springwheat, is_winterwheat, is_soybean, is_rice = FALSE,
                                     GDDmat, GDD_T2m, GDD_Tsoil, GDDemer, GDDrepr, DVI_JULES, 
                                     crop_living_flag, peak_lai_flag, grain_filling_flag, 
                                     astem_leafem, aleaf_leafem, aleaf, astem,
@@ -41,7 +41,7 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
       } else if (crop_C_partit_scheme == 'JULES') {
         
           # Calculate allocation coefficients following the method presented in JULES-crop (Osborne et al. 2015)
-          JULES_crop_alloc = f_get_JULES_crop_allocation_coefficients(is_maize, is_springwheat, is_winterwheat, is_soybean, 
+          JULES_crop_alloc = f_get_JULES_crop_allocation_coefficients(is_maize, is_springwheat, is_winterwheat, is_soybean, is_rice = is_rice,
                                                                       DVI_crop = DVI_JULES, croplive_flag = crop_living_flag)
           astem = JULES_crop_alloc$p_stem
           aleaf = JULES_crop_alloc$p_leaf
@@ -73,6 +73,7 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
         if (is_maize) {stem_resv_frac = 0.12}  # From Willams et al. (2017) recalibrated value, old value in Osborne: 0.35
         if (is_soybean) {stem_resv_frac = 0.26} # From Leung et al. (2020) recalibrated value
         if (is_springwheat || is_winterwheat) {stem_resv_frac = 0.40} # From Osborne et al. (2015) default value
+        if (is_rice) stem_resv_frac = f_rice_JULES_parameters()$allocation$stem_reserve_fraction
         livestem_carbon_partitioning_flux = NPP_gCm2s1 * astem * (1 - stem_resv_frac)
         livestem_resv_carbon_partitioning_flux = NPP_gCm2s1 * astem * (stem_resv_frac)
     } else {
@@ -163,11 +164,17 @@ f_get_CLM_crop_allocation_coefficients = function(a_stem_leafem, a_leaf_leafem, 
   return(output)
 }
 
-f_get_JULES_crop_allocation_coefficients = function(is_maize, is_springwheat, is_winterwheat, is_soybean, 
+f_get_JULES_crop_allocation_coefficients = function(is_maize, is_springwheat, is_winterwheat, is_soybean, is_rice = FALSE,
                                                     DVI_crop, croplive_flag){
     
     # PFT specific parameters for allocation coefficients in JULES, Osborne et al. (2015)
-    if (is_soybean) {
+    if (is_rice) {
+        # Xu (2025), Table 3; see rice_JULES_parameters.R for sign convention.
+        rice_allocation = f_rice_JULES_parameters()$allocation
+        a_root_JULES = rice_allocation$a_root; b_root_JULES = rice_allocation$b_root
+        a_stem_JULES = rice_allocation$a_stem; b_stem_JULES = rice_allocation$b_stem
+        a_leaf_JULES = rice_allocation$a_leaf; b_leaf_JULES = rice_allocation$b_leaf
+    } else if (is_soybean) {
         # Osborne et al. (2015) default
         # a_root_JULES = 20.0; b_root_JULES = -16.5; a_stem_JULES = 18.5; b_stem_JULES = -14.5; a_leaf_JULES = 19.5; b_leaf_JULES = -15.0
       

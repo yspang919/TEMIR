@@ -306,7 +306,14 @@ f_simulate_ij = function(IJ) {
                 springwheat_flag = if (any(PFT_df$PFT_description[ipft] == c('spring_temperate_cereal', 'irrigated_spring_temperate_cereal'))) 1 else 0
                 winterwheat_flag = if (any(PFT_df$PFT_description[ipft] == c('winter_temperate_cereal', 'irrigated_winter_temperate_cereal'))) 1 else 0
                 soybean_flag = if (any(PFT_df$PFT_description[ipft] == c('soybean', 'irrigated_soybean'))) 1 else 0
-                managed_crop_flag = maize_flag || springwheat_flag || winterwheat_flag || soybean_flag
+                # Imported varieties declare their type instead of reserving IDs.
+                # isTRUE also handles older cases without a crop_type column.
+                maize_flag = maize_flag || isTRUE(PFT_df$crop_type[ipft] == 'maize')
+                springwheat_flag = springwheat_flag || isTRUE(PFT_df$crop_type[ipft] == 'springwheat')
+                winterwheat_flag = winterwheat_flag || isTRUE(PFT_df$crop_type[ipft] == 'winterwheat')
+                soybean_flag = soybean_flag || isTRUE(PFT_df$crop_type[ipft] == 'soybean')
+                rice_flag = isTRUE(PFT_df$crop_type[ipft] == 'rice')
+                managed_crop_flag = maize_flag || springwheat_flag || winterwheat_flag || soybean_flag || rice_flag
                 # Stress deciduous PFT:
                 stress_decid_flag = (stress_decid[ipft] == 1)
                 # Woody life form (0 = non-woody; 1 = woody):
@@ -947,7 +954,7 @@ f_simulate_ij = function(IJ) {
                 
                 ####################################################################
                 # Soil water stress function:
-                if (any(PFT_df$PFT_description[ipft] == c('c3_irrigated',
+                if (irrigated[ipft] == 1 || any(PFT_df$PFT_description[ipft] == c('c3_irrigated',
                                                           'irrigated_corn',
                                                           'irrigated_spring_temperate_cereal',
                                                           'irrigated_winter_temperate_cereal',
@@ -1218,7 +1225,7 @@ f_simulate_ij = function(IJ) {
                             
                             # Phenology for crop-type PFT (excluding generic crops 'c3_crop' and 'c3_irrigated')
                             crop_phenology = f_crop_phenology(T_10_d = T_10d, T_min_10_d = Tmin_10d, T_soil = T_soil_daily, T2m = T_daily,
-                                                              is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag,
+                                                              is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag, is_rice = rice_flag,
                                                               leafC = leaf_C, livestemC = livestem_C, livestemresvC = livestem_resv_C, finerootC = fineroot_C, grainC = grain_C, LAI = LAI, SAI = SAI,
                                                               GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDmat = GDD_mat, GDDrepr = GDD_repr, GDDemer = GDD_emer,
                                                               crop_living_flag = crop_live_flag, crop_planting_flag = crop_plant_flag, leaf_emer_flag = leaf_emergence_flag, grain_filling_flag = grain_fill_flag, harvesting_flag = harvest_flag,
@@ -1250,7 +1257,7 @@ f_simulate_ij = function(IJ) {
                             
                             # Fluxes of the allocation of assimilated carbon
                             crop_allocation_fluxes = f_crop_allocation_fluxes(A_can_umolm2s1 = An_daily, mr_total = mr_daily, gr_fraction = if (managed_crop_flag) 0.25 else 0.3, 
-                                                                              is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag,
+                                                                              is_maize = maize_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_soybean = soybean_flag, is_rice = rice_flag,
                                                                               GDDmat = GDD_mat, GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDemer = GDD_emer, GDDrepr = GDD_repr, DVI_JULES = DVI, 
                                                                               crop_living_flag = crop_live_flag, peak_lai_flag = peak_LAI_flag, grain_filling_flag = grain_fill_flag,
                                                                               astem_leafem = a_stem_leafem, aleaf_leafem = a_leaf_leafem, aleaf = a_leaf, astem = a_stem,
@@ -1268,7 +1275,7 @@ f_simulate_ij = function(IJ) {
                         # Updating carbon pool budgets
                         # Some of the C pools are always zero: reserved for natural vegetation
                         plant_Cpool_budgets = f_Cpool_budgets(is_crop = managed_crop_flag, is_evergreen = evergreen_flag, is_stress_decid = stress_decid_flag, is_season_decid = season_decid_flag, 
-                                                              is_maize = maize_flag, is_soybean = soybean_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag,
+                                                              is_maize = maize_flag, is_soybean = soybean_flag, is_springwheat = springwheat_flag, is_winterwheat = winterwheat_flag, is_rice = rice_flag,
                                                               grain_filling_flag = if (managed_crop_flag) crop_phenology$grainfill_flag else NA, 
                                                               harvesting_flag = if (managed_crop_flag) crop_phenology$har_flag else NA, 
                                                               DVI = if (managed_crop_flag) crop_phenology$DVI else NA,
@@ -1293,7 +1300,7 @@ f_simulate_ij = function(IJ) {
                         
                         # Updating the change of vegetation structure
                         vegetation_structure = f_vegetation_structure(is_crop = crop_flag, is_shrub = shrub_flag, is_evergreen = evergreen_flag, is_stress_decid = stress_decid_flag, is_season_decid = season_decid_flag, is_woody = woody_flag,
-                                                                      is_managed_crop = managed_crop_flag, is_maize = maize_flag, is_soybean = soybean_flag, 
+                                                                      is_managed_crop = managed_crop_flag, is_maize = maize_flag, is_soybean = soybean_flag, is_rice = rice_flag,
                                                                       slatop = sla_top, dsladlai = dsla_dlai, laimx = LAI_max, ztopmx = ztopmax,
                                                                       leafC = leaf_C, deadstemC = deadstem_C, 
                                                                       livestemC = if (managed_crop_flag && crop_C_partit_scheme == 'JULES') {livestem_C + livestem_resv_C} else {livestem_C},

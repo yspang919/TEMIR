@@ -84,6 +84,11 @@ if (crop_planting_date_method == 'prescribed-site') {
 # The biomass allocation coefficients from different crop models are therefore calibrated following different phenology.
 
 GDDmat_method = 'prescribed-map'
+# The legacy 'CLM4.5' option also handles imported CLM5 rice parameters:
+# GDDmat = min(GDD0_20yr, hybgdd); GDDrepr = grnfill*GDDmat;
+# GDDemer = lfemerg*GDDmat. The CLM5 rice defaults are 2100, .4, and .01.
+# Prescribed site/map methods retain their supplied thresholds. Daily GDD
+# accumulation is selected independently by GDD_calculation_method below.
 
 # The CLM4.5 option still reads the legacy GDDx map from this directory.
 if (GDDmat_method == 'CLM4.5') {

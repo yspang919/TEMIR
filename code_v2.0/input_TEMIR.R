@@ -110,6 +110,15 @@ if (single_site_flag) {
 # Please refer to each PFT by its PFT number quote in the first column of PFT_df (i.e., not_vegetated = 0)
 sim_PFT = c(18, 20, 24)  # maize, wheat, soybean
 
+# Enable optional PFT definitions in custom_PFT_config/user_custom_PFT.R.
+import_new_PFT = FALSE
+# Initialization copies user_custom_PFT.R into each case; prefer that copy.
+custom_PFT_config_file = if (file.exists('user_custom_PFT.R')) {
+   file.path(getwd(), 'user_custom_PFT.R')
+} else {
+   file.path(code_dir, 'custom_PFT_config', 'user_custom_PFT.R')
+}
+
 # Default CLM4.5 PFT dataframe:
 # 1st col = PFT number; 2nd col = PFT description
 PFT_df = `colnames<-`(rbind.data.frame(
@@ -139,6 +148,7 @@ PFT_df = `colnames<-`(rbind.data.frame(
    c(22, 'irrigated_winter_temperate_cereal'),
    c(23, 'soybean'),
    c(24, 'irrigated_soybean'),
+   # Add new PFTs through custom_PFT_config/user_custom_PFT.R; see that script for configuration.
    # Dataframe settings
    stringsAsFactors = FALSE), c('PFT_number', 'PFT_description'))
 
@@ -213,7 +223,7 @@ O3_damage_flag = FALSE
 O3_damage_scheme = 'Lombardozzi'
 # Ozone sensitivity:
 # For "Lombardozzi" scheme: "high", "average" or "low"
-# For "Sitch" scheme: "high" or "low"
+# For "Sitch" scheme: "high", "low", or "custom-rice" (mean rice coefficients)
 O3_sensitivity = "average"
 
 # Which aerodynamic conductance for scalars to calculate O3 flux?

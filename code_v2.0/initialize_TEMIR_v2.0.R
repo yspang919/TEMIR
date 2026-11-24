@@ -65,6 +65,13 @@ file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/execution_v', TEMI
 # Copy baseline input script:
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/input_TEMIR.R'), to = sim_dir)
 
+# Copy editable custom PFT definitions for both prescribed-LAI and BGC cases.
+# Import helpers remain in the shared code directory and are sourced on demand.
+if (!file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version,
+                            '/custom_PFT_config/user_custom_PFT.R'), to = sim_dir)) {
+   stop('Could not copy user_custom_PFT.R into the simulation directory')
+}
+
 # Copy library setup script:
 file.copy(from = paste0(TEMIR_dir, 'code_v', TEMIR_version, '/library_setup.R'), to = sim_dir)
 

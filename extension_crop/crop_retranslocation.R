@@ -11,7 +11,7 @@ f_crop_retranslocation_CLM = function(variables) {
 }
 
 
-f_crop_retranslocation_JULES = function(is_maize, is_springwheat, is_winterwheat, is_soybean,
+f_crop_retranslocation_JULES = function(is_maize, is_springwheat, is_winterwheat, is_soybean, is_rice = FALSE,
                                         # retrans_DVI = 1.5, retrans_astem = 0.01,
                                         grainC, 
                                         leafC = NULL, leafC_senesc_flux, 
@@ -48,6 +48,15 @@ f_crop_retranslocation_JULES = function(is_maize, is_springwheat, is_winterwheat
     
     # Not all C in senesced leaves is transferred to grain. Need some research.... assume efficiency of 1 at the time being....
     leaf2grain_eff = 1
+    stem_fraction_per_day = 0.1
+    if (is_rice) {
+        # Xu (2025), Sect. 3.1.3; units/fate documented in the rice profile.
+        rice_retranslocation = f_rice_JULES_parameters()$retranslocation
+        retrans_DVI = rice_retranslocation$leaf_DVI_onset
+        retrans_astem = rice_retranslocation$stem_allocation_threshold
+        leaf2grain_eff = rice_retranslocation$leaf_transfer_fraction
+        stem_fraction_per_day = rice_retranslocation$stem_fraction_per_day
+    }
     
     
     if (!is.na(DVI) && DVI >= retrans_DVI && DVI < harvest_DVI) {
@@ -58,9 +67,10 @@ f_crop_retranslocation_JULES = function(is_maize, is_springwheat, is_winterwheat
         leaf2grain_flux = NA
     }
     
-    if (!is.na(astem) && !is.na(livestem_resvC) && astem <= retrans_astem && !is.na(DVI) && DVI < harvest_DVI) {
+    if (!is.na(astem) && !is.na(livestem_resvC) &&
+        (if (is_rice) astem < retrans_astem else astem <= retrans_astem) && !is.na(DVI) && DVI < harvest_DVI) {
         # rate: 10% d-1, convert to s-1
-        stem2grain_flux = (0.1/86400) * livestem_resvC * second_per_day
+        stem2grain_flux = (stem_fraction_per_day/86400) * livestem_resvC * second_per_day
         livestem_resvC = livestem_resvC - stem2grain_flux
         grainC = grainC + stem2grain_flux
     } else {

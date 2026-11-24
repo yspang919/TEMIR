@@ -178,6 +178,46 @@ hbot = c(0, 8.5, 8.5, 7, 1, 1, 10, 11.5, 11.5, 0.1, 0.1, 0.1, rep(0.01, times=13
 # Plant group (for use in ozone-vegetation scheme):
 plantgroup = c('none', 'needleleaf', 'needleleaf', 'needleleaf', 'broadleaf', 'broadleaf', 'broadleaf', 'broadleaf', 'broadleaf', 'shrub', 'shrub', 'shrub', 'C3_grass', 'C3_grass', 'C4_grass', 'C3_grass', 'C3_grass', 'C4_grass', 'C4_grass', 'C3_grass', 'C3_grass', 'C3_grass', 'C3_grass', 'C3_grass', 'C3_grass')
 
+# Parameters for Medlyn model
+g1_med_table = c(NA, 2.35, 2.35, 2.35, 4.12, 4.12, 4.45, 4.45, 4.45, 4.7, 4.7, 4.7, 2.22, 5.25, 1.62, NA, NA, 1.79, 1.79, NA, NA, NA, NA, 5.79, 5.79)
+
+# Append optional parameters before calculating derived traits and root profiles.
+# Keep the source surface count: its arrays still describe the original catalog.
+custom_PFT_enabled = isTRUE(get0('import_new_PFT', ifnotfound = FALSE))
+custom_PFT_base_count = length(pftnum)
+if (custom_PFT_enabled) {
+    source(file.path(code_dir, 'custom_PFT_config', 'custom_PFT_functions.R'), local = TRUE)
+    custom_PFT_config = new.env(parent = environment())
+    sys.source(get0('custom_PFT_config_file', ifnotfound = file.path(code_dir,
+        'custom_PFT_config', 'user_custom_PFT.R')), envir = custom_PFT_config)
+    custom_PFTs = get('custom_PFTs', envir = custom_PFT_config, inherits = FALSE)
+    custom_PFT_schema = f_custom_PFT_schema(biogeochem_flag)
+    custom_PFT_parameters = f_import_custom_PFTs(
+        mget(c('pftname', 'pftnum', 'PFT_df', custom_PFT_schema$numeric,
+               custom_PFT_schema$character), envir = environment()),
+        custom_PFTs, biogeochem_flag)
+    custom_PFT_selected = intersect(sim_PFT,
+        vapply(custom_PFTs, function(x) x$pft_number, numeric(1)))
+    for (custom_PFT_definition in custom_PFTs) {
+        if (biogeochem_flag && custom_PFT_definition$pft_number %in% custom_PFT_selected &&
+            (!identical(custom_PFT_definition$initial_state, 'preplant') ||
+             is.null(custom_PFT_definition$crop_type) || custom_PFT_definition$crop_type == 'none'))
+            stop('New BGC crops require crop_type and initial_state = preplant in user_custom_PFT.R')
+        if (!biogeochem_flag && custom_PFT_definition$pft_number %in% custom_PFT_selected &&
+            (is.null(custom_PFT_definition$monthly_LAI) || is.null(custom_PFT_definition$monthly_SAI)))
+            stop('Specify monthly_LAI and monthly_SAI in user_custom_PFT.R before simulating ',
+                 custom_PFT_definition$pft_name)
+    }
+    if (length(custom_PFT_selected) && !is.null(get0('drydep_scheme', ifnotfound = NULL)))
+        stop('Custom PFT dry deposition mappings are not configured; use drydep_scheme = NULL for the pre-test')
+    processed_surf_data_dir = f_custom_PFT_cache_dir(processed_surf_data_dir,
+        custom_PFT_parameters, custom_PFTs, biogeochem_flag)
+    list2env(custom_PFT_parameters, envir = environment())
+    message('Imported custom PFTs: ', paste(vapply(custom_PFTs,
+        function(x) x$pft_name, character(1)), collapse = ', '))
+    rm(custom_PFT_parameters, custom_PFT_config, custom_PFT_schema, custom_PFT_definition)
+}
+
 # Mass ratio of total Rubisco molecular mass to nitrogen in Rubisco (g Rubisco gN^-1):
 fnr = 7.16
 # Specific activity of Rubisco (umol CO2 g^-1 Rubisco s^-1):
@@ -187,9 +227,6 @@ lnctop = 1/(leafcn*slatop)
 # Maximum rate of carboxylation at top of canopy at 25 degC (umol CO2 m^-2 s^-1):
 vcmax25top = lnctop*flnr*fnr*ar25
 vcmax25top[1] = 0
-
-# Parameters for Medlyn model
-g1_med_table = c(NA, 2.35, 2.35, 2.35, 4.12, 4.12, 4.45, 4.45, 4.45, 4.7, 4.7, 4.7, 2.22, 5.25, 1.62, NA, NA, 1.79, 1.79, NA, NA, NA, NA, 5.79, 5.79)
 
 ################################################################################
 ### Surface data from CLM default ncdf file:
@@ -250,6 +287,29 @@ LANDFRAC_PFT = ncvar_get(nc, 'LANDFRAC_PFT')
 # Land mask from PFT dataset, indicative of real/fake points:
 PFTDATA_MASK = ncvar_get(nc, 'PFTDATA_MASK')
 nc_close(nc)
+
+if (custom_PFT_enabled) {
+    for (custom_PFT_array_name in c('PCT_PFT', 'MONTHLY_LAI', 'MONTHLY_SAI',
+                                  'MONTHLY_HEIGHT_TOP', 'MONTHLY_HEIGHT_BOT')) {
+        assign(custom_PFT_array_name, f_extend_custom_PFT_array(
+            get(custom_PFT_array_name), custom_PFTs, custom_PFT_base_count))
+    }
+    for (custom_PFT_k in seq_along(custom_PFTs)) {
+        custom_PFT_ipft = custom_PFT_base_count + custom_PFT_k
+        custom_PFT_definition = custom_PFTs[[custom_PFT_k]]
+        if (!is.null(custom_PFT_definition$monthly_LAI)) {
+            MONTHLY_LAI[,,custom_PFT_ipft,] = rep(custom_PFT_definition$monthly_LAI,
+                each = prod(dim(MONTHLY_LAI)[1:2]))
+        }
+        if (!is.null(custom_PFT_definition$monthly_SAI)) {
+            MONTHLY_SAI[,,custom_PFT_ipft,] = rep(custom_PFT_definition$monthly_SAI,
+                each = prod(dim(MONTHLY_SAI)[1:2]))
+        }
+        MONTHLY_HEIGHT_TOP[,,custom_PFT_ipft,] = htop[custom_PFT_ipft]
+        MONTHLY_HEIGHT_BOT[,,custom_PFT_ipft,] = hbot[custom_PFT_ipft]
+    }
+    rm(custom_PFT_array_name, custom_PFT_k, custom_PFT_ipft, custom_PFT_definition)
+}
 
 # The following are variables from file "surfdata_1.9x2.5_mp24_simyr2000_c141219.nc".
 # # Precent crop functional type on crop land unit (% of land unit):
@@ -1057,7 +1117,19 @@ disp_on_z0m[which(is.na(disp_on_z0m))] = 0
 ### Initial conditions of ecosystem variables in crop simulations
 ################################################################################
 
-if (biogeochem_flag) {
+if (biogeochem_flag && custom_PFT_enabled && length(sim_PFT) > 0L &&
+    all(sim_PFT %in% custom_PFT_selected)) {
+    # Explicit pre-plant cold start: no biomass, canopy, or active crop. Seed
+    # carbon is supplied by the existing emergence_carbon_to_leaf setting.
+    # No legacy CLM restart is needed when only imported crops are simulated.
+    for (custom_PFT_array_name in c('LAI_initial_map', 'SAI_initial_map',
+        'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
+        'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
+        assign(custom_PFT_array_name, array(0, c(length(lon), length(lat), length(pftname))))
+    }
+    rm(custom_PFT_array_name)
+    message('Initialized imported crops before planting with zero canopy and carbon')
+} else if (biogeochem_flag) {
   
   subfn = 'processed_clmi.ICRUCLM45BGCCROPmp24.0241-01-01.1.9x2.5_g1v6_simyr2000_c130515.nc'
   filename = paste0(initial_data_dir, subfn)
@@ -1072,6 +1144,17 @@ if (biogeochem_flag) {
   livecrootC_initial_map = ncvar_get(nc, 'livecrootC'); livecrootC_initial_map = ifelse(test = is.na(livecrootC_initial_map), yes = 0, no = livecrootC_initial_map)
   deadcrootC_initial_map = ncvar_get(nc, 'deadcrootC'); deadcrootC_initial_map = ifelse(test = is.na(deadcrootC_initial_map), yes = 0, no = deadcrootC_initial_map)
   grainC_initial_map = ncvar_get(nc, 'grainC'); grainC_initial_map = ifelse(test = is.na(grainC_initial_map), yes = 0, no = grainC_initial_map)
+
+  # Imported crops use pre-plant zero states; legacy crops retain their maps.
+  if (custom_PFT_enabled) {
+      for (custom_PFT_array_name in c('LAI_initial_map', 'SAI_initial_map',
+          'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
+          'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
+          assign(custom_PFT_array_name, f_extend_custom_PFT_array(
+              get(custom_PFT_array_name), custom_PFTs, custom_PFT_base_count))
+      }
+      rm(custom_PFT_array_name)
+  }
 
   # storage C pools x7 for deciduous (reserved for natural vegetations)
   # leafC_storage_initial_map = ncvar_get(nc, 'leafC_storage')

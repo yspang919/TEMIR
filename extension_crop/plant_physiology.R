@@ -7,7 +7,7 @@
 ################################################################################
 
 f_vegetation_structure = function(is_crop, is_shrub, is_evergreen, is_stress_decid, is_season_decid, is_woody,
-                                  is_managed_crop, is_maize, is_soybean, 
+                                  is_managed_crop, is_maize, is_soybean, is_rice = FALSE,
                                   slatop, dsladlai, laimx, ztopmx,
                                   leafC, livestemC, deadstemC, 
                                   h_top, tlai = LAI, tsai = SAI, 
@@ -27,6 +27,7 @@ f_vegetation_structure = function(is_crop, is_shrub, is_evergreen, is_stress_dec
     LAI_prev = tlai
     SAI_prev = tsai
     htop_prev = h_top
+    if (is_rice) rice_structure = f_rice_JULES_parameters()$structure
     
 
     # Calculation of LAI
@@ -53,10 +54,15 @@ f_vegetation_structure = function(is_crop, is_shrub, is_evergreen, is_stress_dec
                 # SLA_base = gamma; f_phen = (DVI + 0.06)^delta
                 if (is_maize) {SLA_base = 17.6; SLA_delta = -0.33}   # Willams et al. 2017 values 
                 if (is_soybean) {SLA_base = 24.0; SLA_delta = 0.15}   # Leung et al. 2020 values
+                leaf_carbon_fraction = 0.45
+                if (is_rice) {
+                    SLA_base = rice_structure$SLA_gamma; SLA_delta = rice_structure$SLA_delta
+                    leaf_carbon_fraction = rice_structure$leaf_carbon_fraction
+                }
                 f_CO2 = 1
                 f_O3 = 1
                 f_phen = (crop_DVI+0.06)^SLA_delta
-                LAI_new = leafC * (SLA_base/1000/0.45 * f_phen * f_CO2 * f_O3)   # convert the JULES-based SLA unit (m2 kg-1) to CLM-based SLA unit (m2 gC-1), assume 45% C content
+                LAI_new = leafC * (SLA_base/1000/leaf_carbon_fraction * f_phen * f_CO2 * f_O3)
 
             } else {
                 LAI_new = 0
@@ -138,11 +144,16 @@ f_vegetation_structure = function(is_crop, is_shrub, is_evergreen, is_stress_dec
             
             if (is_soybean) {h_kappa = 1.3; h_lambda = 0.41}    # JULES Leung et al. kappa = 1.9; lambda = 0.47.
             if (is_maize) {h_kappa = 3.2; h_lambda = 0.435}     # JULES Willams et al. kappa = 3.6; lambda = 0.38 at US Mead Fluxnet
+            stem_carbon_fraction = 0.45
+            if (is_rice) {
+                h_kappa = rice_structure$height_kappa; h_lambda = rice_structure$height_lambda
+                stem_carbon_fraction = rice_structure$stem_carbon_fraction
+            }
             
             if (crop_living_flag) {
                 # need to convert stemC (gC m-2) to biomass (kg m-2),  assume 45% C content
                 # also ensure canopy height doesn't decrease when stemC decreases during retranslocation (when JULES retranslocation is used)
-                h_top = max(0.05, htop_prev, h_kappa*(livestemC/1000/0.45)^h_lambda, na.rm = TRUE)  # minimum height of 0.05m follows CLM 
+                h_top = max(0.05, htop_prev, h_kappa*(livestemC/1000/stem_carbon_fraction)^h_lambda, na.rm = TRUE)
                 h_bottom = 0.02   # follow CLM
             } else {
                 h_top = 0

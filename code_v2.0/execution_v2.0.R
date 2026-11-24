@@ -107,6 +107,7 @@ source(paste0(code_dir, 'PFT_surf_data.R'))
 
 # Functions used in the crop module (after version 2.0)
 if(biogeochem_flag){
+   source(paste0(TEMIR_dir, '/extension_crop/rice_JULES_parameters.R'))
    source(paste0(TEMIR_dir, '/extension_crop/biomass_partitioning.R'))
    source(paste0(TEMIR_dir, '/extension_crop/plant_phenology.R'))
    source(paste0(TEMIR_dir, '/extension_crop/plant_physiology.R'))
@@ -551,7 +552,11 @@ for (d in 1:n_day_sim) {
             'irrigated_soybean'
          )
       ]
-   
+      if (!is.null(PFT_df$crop_type)) {
+         managed_crop_PFT_number = union(managed_crop_PFT_number,
+            PFT_df$PFT_number[PFT_df$crop_type != 'none'])
+      }
+
        # GDD requirements (exclusive for crop simulation)
       if (any(sim_PFT %in% managed_crop_PFT_number)) {
          if (GDDmat_method == "CLM4.5") {
