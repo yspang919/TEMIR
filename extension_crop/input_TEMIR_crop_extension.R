@@ -67,6 +67,21 @@ natveg_C_partit_method = 'custom'
 # 'prescribed-site': enter a single value (in day of year) as the planting date. Suitable for single-site/small-scale simulations with a known planting date.
 crop_planting_date_method = 'prescribed-map'
 
+# Winter wheat uses the dedicated function in plant_phenology.R (Lu et al., 2017).
+# Optional overrides of that function's winter-specific defaults; summer PFT
+# traits are unchanged. Prescribed site/map dates and GDD thresholds still win.
+# With calculated planting ('CLM4.5'), supply the winter-season climatology:
+# winter_wheat_parameters = list(GDD0_20yr = 1800)  # Sep-Jun NH / Apr-Sep SH
+# For regional runs this scalar must be representative of the simulated area;
+# a spatial winter-climate reader is not included yet. Prescribe dates instead
+# when that climate input is unavailable. See extension_crop/README_winter_wheat.md.
+winter_wheat_parameters = list()
+# All winter-wheat crown temperatures use shallow TSOIL1. Subdaily soil
+# samples drive hardening and frost damage; their daily mean drives VD.
+# Optional snow depth is used only for under-snow stress, never Tcrown.
+# Cold/damage and CLM allocation defaults follow Lu (2017); see README for
+# numerical safeguards, the 50-effective-day dehardening gate and C accounting.
+
 # Prescribed planting date for single-site simulations
 if (crop_planting_date_method == 'prescribed-site') {
     # example case: 15 April
@@ -226,6 +241,17 @@ available_outputs_df = rbind.data.frame(
     c('mr_grain', 'gC m^-2 s^-1', 'Grain maintenance respiration', 'PFT'),
     c('mr_total', 'gC m^-2 s^-1', 'Total maintenance respiration', 'PFT'),
     # Crop phenology variables
+    c('winter_Tcrown', 'degC', 'Winter wheat shallow-soil crown temperature', 'PFT_daily'),
+    c('winter_LT50', 'degC', 'Winter wheat temperature for 50 percent survival', 'PFT_daily'),
+    c('winter_VD', 'day', 'Winter wheat effective vernalization days', 'PFT_daily'),
+    c('winter_VF', '0-1', 'Winter wheat vernalization factor', 'PFT_daily'),
+    c('winter_WDD', 'degree day', 'Winter wheat weighted freezing exposure since damage reset', 'PFT_daily'),
+    c('winter_survival', '0-1', 'Winter wheat daily mean survival indicator', 'PFT_daily'),
+    c('winter_snow_stress_available', '0-1', 'Whether snow depth is available for winter wheat under-snow stress', 'PFT_daily'),
+    c('leafC_frost_to_litter', 'gC m^-2 s^-1', 'Winter wheat frost-damaged leaf carbon transferred to litter', 'PFT_daily'),
+    c('winter_litter_C', 'gC m^-2', 'Winter wheat cumulative litter input, no decomposition', 'PFT_daily'),
+    c('winter_harvested_C', 'gC m^-2', 'Winter wheat cumulative harvested grain carbon export', 'PFT_daily'),
+    c('winter_C_balance_error', 'gC m^-2', 'Winter wheat daily vegetation litter harvest carbon balance residual', 'PFT_daily'),
     c('GDDT2m', 'Degree day', 'Growing degree day of T2m', 'PFT_daily'),
     c('GDDTsoil', 'Degree day', 'Growing degree day of Tsoil', 'PFT_daily'),
     c('GDDmat' , 'Degree day', 'Growing degree day requirement to reach crop maturity', 'PFT_daily'),

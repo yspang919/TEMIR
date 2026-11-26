@@ -1117,51 +1117,71 @@ disp_on_z0m[which(is.na(disp_on_z0m))] = 0
 ### Initial conditions of ecosystem variables in crop simulations
 ################################################################################
 
-if (biogeochem_flag && custom_PFT_enabled && length(sim_PFT) > 0L &&
-    all(sim_PFT %in% custom_PFT_selected)) {
-    # Explicit pre-plant cold start: no biomass, canopy, or active crop. Seed
-    # carbon is supplied by the existing emergence_carbon_to_leaf setting.
-    # No legacy CLM restart is needed when only imported crops are simulated.
-    for (custom_PFT_array_name in c('LAI_initial_map', 'SAI_initial_map',
-        'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
-        'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
-        assign(custom_PFT_array_name, array(0, c(length(lon), length(lat), length(pftname))))
-    }
-    rm(custom_PFT_array_name)
-    message('Initialized imported crops before planting with zero canopy and carbon')
-} else if (biogeochem_flag) {
-  
-  subfn = 'processed_clmi.ICRUCLM45BGCCROPmp24.0241-01-01.1.9x2.5_g1v6_simyr2000_c130515.nc'
-  filename = paste0(initial_data_dir, subfn)
-  nc = nc_open(filename)
-  LAI_initial_map = ncvar_get(nc, 'tlai'); LAI_initial_map = ifelse(test = is.na(LAI_initial_map), yes = 0, no = LAI_initial_map)
-  SAI_initial_map = ncvar_get(nc, 'tsai'); SAI_initial_map = ifelse(test = is.na(SAI_initial_map), yes = 0, no = SAI_initial_map)
-
-  leafC_initial_map = ncvar_get(nc, 'leafC'); leafC_initial_map = ifelse(test = is.na(leafC_initial_map), yes = 0, no = leafC_initial_map)
-  frootC_initial_map = ncvar_get(nc, 'frootC'); frootC_initial_map = ifelse(test = is.na(frootC_initial_map), yes = 0, no = frootC_initial_map)
-  livestemC_initial_map = ncvar_get(nc, 'livestemC'); livestemC_initial_map = ifelse(test = is.na(livestemC_initial_map), yes = 0, no = livestemC_initial_map)
-  deadstemC_initial_map = ncvar_get(nc, 'deadstemC'); deadstemC_initial_map = ifelse(test = is.na(deadstemC_initial_map), yes = 0, no = deadstemC_initial_map)
-  livecrootC_initial_map = ncvar_get(nc, 'livecrootC'); livecrootC_initial_map = ifelse(test = is.na(livecrootC_initial_map), yes = 0, no = livecrootC_initial_map)
-  deadcrootC_initial_map = ncvar_get(nc, 'deadcrootC'); deadcrootC_initial_map = ifelse(test = is.na(deadcrootC_initial_map), yes = 0, no = deadcrootC_initial_map)
-  grainC_initial_map = ncvar_get(nc, 'grainC'); grainC_initial_map = ifelse(test = is.na(grainC_initial_map), yes = 0, no = grainC_initial_map)
-
-  # Imported crops use pre-plant zero states; legacy crops retain their maps.
-  if (custom_PFT_enabled) {
+if (biogeochem_flag) {
+  # Winter phenology has no active-crop cold-start state. Its initial maps must
+  # therefore describe preplant conditions, including mixed-PFT simulations.
+  winter_initial_rows = which(PFT_df$PFT_description %in%
+      c('winter_temperate_cereal', 'irrigated_winter_temperate_cereal'))
+  if ('crop_type' %in% names(PFT_df))
+      winter_initial_rows = union(winter_initial_rows, which(PFT_df$crop_type == 'winterwheat'))
+  winter_initial_numbers = as.integer(PFT_df$PFT_number[winter_initial_rows])
+  winter_initial_ipft = which(pftnum %in% winter_initial_numbers)
+  preplant_PFT_numbers = union(winter_initial_numbers,
+      if (custom_PFT_enabled) custom_PFT_selected else integer())
+  if (length(sim_PFT) > 0L && all(sim_PFT %in% preplant_PFT_numbers)) {
+      # Explicit pre-plant cold start: no biomass, canopy, or active crop. Seed
+      # carbon is supplied by the existing emergence_carbon_to_leaf setting.
+      # No legacy CLM restart is needed when only imported crops are simulated.
       for (custom_PFT_array_name in c('LAI_initial_map', 'SAI_initial_map',
           'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
           'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
-          assign(custom_PFT_array_name, f_extend_custom_PFT_array(
-              get(custom_PFT_array_name), custom_PFTs, custom_PFT_base_count))
+          assign(custom_PFT_array_name, array(0, c(length(lon), length(lat), length(pftname))))
       }
       rm(custom_PFT_array_name)
+      message('Initialized managed preplant crops with zero canopy and carbon')
+  } else {
+
+    subfn = 'processed_clmi.ICRUCLM45BGCCROPmp24.0241-01-01.1.9x2.5_g1v6_simyr2000_c130515.nc'
+    filename = paste0(initial_data_dir, subfn)
+    nc = nc_open(filename)
+    LAI_initial_map = ncvar_get(nc, 'tlai'); LAI_initial_map = ifelse(test = is.na(LAI_initial_map), yes = 0, no = LAI_initial_map)
+    SAI_initial_map = ncvar_get(nc, 'tsai'); SAI_initial_map = ifelse(test = is.na(SAI_initial_map), yes = 0, no = SAI_initial_map)
+
+    leafC_initial_map = ncvar_get(nc, 'leafC'); leafC_initial_map = ifelse(test = is.na(leafC_initial_map), yes = 0, no = leafC_initial_map)
+    frootC_initial_map = ncvar_get(nc, 'frootC'); frootC_initial_map = ifelse(test = is.na(frootC_initial_map), yes = 0, no = frootC_initial_map)
+    livestemC_initial_map = ncvar_get(nc, 'livestemC'); livestemC_initial_map = ifelse(test = is.na(livestemC_initial_map), yes = 0, no = livestemC_initial_map)
+    deadstemC_initial_map = ncvar_get(nc, 'deadstemC'); deadstemC_initial_map = ifelse(test = is.na(deadstemC_initial_map), yes = 0, no = deadstemC_initial_map)
+    livecrootC_initial_map = ncvar_get(nc, 'livecrootC'); livecrootC_initial_map = ifelse(test = is.na(livecrootC_initial_map), yes = 0, no = livecrootC_initial_map)
+    deadcrootC_initial_map = ncvar_get(nc, 'deadcrootC'); deadcrootC_initial_map = ifelse(test = is.na(deadcrootC_initial_map), yes = 0, no = deadcrootC_initial_map)
+    grainC_initial_map = ncvar_get(nc, 'grainC'); grainC_initial_map = ifelse(test = is.na(grainC_initial_map), yes = 0, no = grainC_initial_map)
+
+    # Imported crops use pre-plant zero states; legacy crops retain their maps.
+    if (custom_PFT_enabled) {
+        for (custom_PFT_array_name in c('LAI_initial_map', 'SAI_initial_map',
+            'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
+            'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
+            assign(custom_PFT_array_name, f_extend_custom_PFT_array(
+                get(custom_PFT_array_name), custom_PFTs, custom_PFT_base_count))
+        }
+        rm(custom_PFT_array_name)
+    }
+
+    # storage C pools x7 for deciduous (reserved for natural vegetations)
+    # leafC_storage_initial_map = ncvar_get(nc, 'leafC_storage')
+    # ...
+
+    nc_close(nc)
+    print(paste0("Finish loading initial data from ",subfn))
   }
-
-  # storage C pools x7 for deciduous (reserved for natural vegetations)
-  # leafC_storage_initial_map = ncvar_get(nc, 'leafC_storage')
-  # ...
-
-  nc_close(nc)
-  print(paste0("Finish loading initial data from ",subfn))
+  for (initial_array_name in c('LAI_initial_map', 'SAI_initial_map',
+      'leafC_initial_map', 'frootC_initial_map', 'livestemC_initial_map',
+      'deadstemC_initial_map', 'livecrootC_initial_map', 'deadcrootC_initial_map', 'grainC_initial_map')) {
+      initial_array = get(initial_array_name)
+      if (length(winter_initial_ipft)) initial_array[,,winter_initial_ipft] = 0
+      assign(initial_array_name, initial_array)
+  }
+  rm(initial_array_name, initial_array, winter_initial_rows, winter_initial_numbers,
+     winter_initial_ipft, preplant_PFT_numbers)
 }
 
 ################################################################################

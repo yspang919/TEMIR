@@ -23,7 +23,8 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
                                     GDDmat, GDD_T2m, GDD_Tsoil, GDDemer, GDDrepr, DVI_JULES, 
                                     crop_living_flag, peak_lai_flag, grain_filling_flag, 
                                     astem_leafem, aleaf_leafem, aleaf, astem,
-                                    bfact, arooti, arootf, astemf, declfact, allconss, aleaff, allconsl, lfemerg, fleafi){
+                                    bfact, arooti, arootf, astemf, declfact, allconss, aleaff, allconsl, lfemerg, fleafi,
+                                    vernalization_factor = 1, winter_parameters = list()){
     
     # Convert A_can (GPP) from umol m^-2 s^-1 to gC m^-2 s^-1
     A_can_gCm2s1 = A_can_umolm2s1 * 12.011e-6
@@ -51,10 +52,17 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
         } else if (crop_C_partit_scheme == 'CLM4.5'){
           
           # Calculate allocation coefficients following the method in CLM4.5
+          if (is_winterwheat) {
+              CLM45_crop_alloc = f_get_winter_wheat_CLM_allocation(
+                  GDD_T2m, GDD_Tsoil, GDDmat, GDDrepr, GDDemer,
+                  crop_living_flag, astem_leafem, aleaf_leafem,
+                  astemf, aleaff, vernalization_factor, winter_parameters)
+          } else {
           CLM45_crop_alloc = f_get_CLM_crop_allocation_coefficients(a_stem_leafem = astem_leafem, a_leaf_leafem = aleaf_leafem, a_leaf = aleaf, a_stem = astem,
                                                                      GDDT2m = GDD_T2m, GDDTsoil = GDD_Tsoil, GDD_mat = GDDmat, GDD_repr = GDDrepr, GDD_emer = GDDemer,
                                                                      crop_live_flag = crop_living_flag, peak_LAI_flag = peak_lai_flag, grain_fill_flag = grain_filling_flag,
                                                                      bfact = bfact, arooti = arooti, arootf = arootf, astemf = astemf, declfact = declfact, allconss = allconss, aleaff = aleaff, allconsl = allconsl, lfemerg = lfemerg, fleafi = fleafi)
+          }
           astem = CLM45_crop_alloc$a_stem
           aleaf = CLM45_crop_alloc$a_leaf
           aroot = CLM45_crop_alloc$a_root
@@ -78,7 +86,7 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
         livestem_resv_carbon_partitioning_flux = NPP_gCm2s1 * astem * (stem_resv_frac)
     } else {
         livestem_carbon_partitioning_flux = NPP_gCm2s1 * astem
-        livestem_resv_carbon_partitioning_flux = NA
+        livestem_resv_carbon_partitioning_flux = if (is_winterwheat) 0 else NA
     }
     
     # # Allocation fluxes to plant parts that are only available for deciduous PFTs
@@ -111,6 +119,61 @@ f_crop_allocation_fluxes = function(A_can_umolm2s1, mr_total, gr_fraction = 0.3,
 }
 
 
+
+f_get_winter_wheat_CLM_allocation = function(GDD, soil_GDD, maturity, reproductive,
+                                            emergence, living, stem_at_reproduction,
+                                            leaf_at_reproduction, final_stem,
+                                            final_leaf, VF, winter_parameters = list()) {
+    # Lu (2017), Table 3: reproductive decline is anchored to the last
+    # vegetative coefficients, rather than multiplying yesterday's coefficient.
+    # No LAI-driven reproductive trigger or leaf-allocation cap for winter wheat.
+    p = f_winter_wheat_parameters(winter_parameters)
+    if (length(VF) != 1L || !is.finite(VF) || VF < 0 || VF > 1)
+        stop('Winter allocation requires a vernalization factor in [0,1]')
+    leaf = stem = root = grain = 0
+    if (living && soil_GDD >= emergence && GDD < maturity) {
+        root = p$initial_root_allocation -
+            (p$initial_root_allocation-p$final_root_allocation)*GDD/maturity
+        leaf_before = function(gdd) (1-root)*p$initial_leaf_allocation *
+            (exp(-.1)-exp(-.1*gdd/reproductive))/(exp(-.1)-1)
+        if (GDD < reproductive) {
+            leaf = max(0, leaf_before(GDD))
+            stem = 1-root-leaf
+            stem_at_reproduction = stem
+            leaf_at_reproduction = leaf
+        } else {
+            if (!is.finite(stem_at_reproduction) || !is.finite(leaf_at_reproduction) ||
+                min(stem_at_reproduction, leaf_at_reproduction) < 0)
+                stop('Winter reproductive allocation needs nonnegative saved vegetative coefficients')
+            if (stem_at_reproduction+leaf_at_reproduction == 0) {
+                leaf_at_reproduction = max(0, leaf_before(reproductive))
+                stem_at_reproduction = 1-root-leaf_at_reproduction
+            }
+            decline = max(0, 1-(GDD-reproductive)/
+                (maturity*p$allocation_decline_factor-reproductive))
+            leaf = if (leaf_at_reproduction <= final_leaf) leaf_at_reproduction else
+                max(final_leaf, leaf_at_reproduction*decline^p$leaf_allocation_decline)
+            stem = if (stem_at_reproduction <= final_stem) stem_at_reproduction else
+                max(final_stem, stem_at_reproduction*decline^p$stem_allocation_decline)
+            # Root fraction decreases with development. Guard the available
+            # shoot fraction when user-supplied anchors/floors exceed it.
+            if (leaf+stem > 1-root) {
+                scale = (1-root)/(leaf+stem); leaf = leaf*scale; stem = stem*scale
+            }
+            grain_unadjusted = max(0, 1-root-leaf-stem)
+            grain = grain_unadjusted*VF
+            retained = grain_unadjusted-grain
+            # Lu specifies the grain penalty, not the destination of rejected
+            # C. TEMIR conserves C by redistributing it to leaf/stem in their
+            # current ratio (to stem if neither has an active sink).
+            leaf_share = if (leaf+stem > 0) leaf/(leaf+stem) else 0
+            leaf = leaf+retained*leaf_share; stem = stem+retained*(1-leaf_share)
+        }
+    }
+    list(a_leaf = leaf, a_stem = stem, a_root = root, a_grain = grain,
+         a_stem_leafemergence = stem_at_reproduction,
+         a_leaf_leafemergence = leaf_at_reproduction)
+}
 
 f_get_CLM_crop_allocation_coefficients = function(a_stem_leafem, a_leaf_leafem, a_leaf, a_stem,
                                               crop_live_flag, peak_LAI_flag, grain_fill_flag,

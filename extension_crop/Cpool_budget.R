@@ -19,7 +19,33 @@ f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_de
                             livecoarseroot_C_prev, livecoarseroot_C_biomass_partitioning_flux_gCm2s1, livecoarseroot_C_loss_flux_gCm2s1,
                             deadcoarseroot_C_prev, deadcoarseroot_C_biomass_partitioning_flux_gCm2s1, deadcoarseroot_C_loss_flux_gCm2s1,
                             fineroot_C_prev, fineroot_C_biomass_partitioning_flux_gCm2s1, fineroot_C_loss_flux_gCm2s1,
-                            grain_C_prev, grain_C_biomass_partitioning_flux_gCm2s1, grain_C_loss_flux_gCm2s1) {
+                            grain_C_prev, grain_C_biomass_partitioning_flux_gCm2s1, grain_C_loss_flux_gCm2s1,
+                            leaf_frost_loss_flux_gCm2s1 = 0, winter_carbon_state = NULL) {
+  # Winter transfers are accounted explicitly: damaged tissue is litter, never
+  # JULES leaf-to-grain retranslocation. Keep the legacy summer budget intact.
+  if (is_crop && is_winterwheat) {
+    return(f_winter_wheat_Cpool_budget(
+      pools = c(leaf = leaf_C_prev, stem = livestem_C_prev, reserve = livestem_resv_C_prev,
+                deadstem = deadstem_C_prev, livecoarseroot = livecoarseroot_C_prev,
+                deadcoarseroot = deadcoarseroot_C_prev, root = fineroot_C_prev, grain = grain_C_prev),
+      allocation = c(leaf = leaf_C_biomass_partitioning_flux_gCm2s1,
+                     stem = livestem_C_biomass_partitioning_flux_gCm2s1,
+                     reserve = if (is.na(livestem_resv_C_biomass_partitioning_flux_gCm2s1)) 0 else livestem_resv_C_biomass_partitioning_flux_gCm2s1,
+                     deadstem = deadstem_C_biomass_partitioning_flux_gCm2s1,
+                     livecoarseroot = livecoarseroot_C_biomass_partitioning_flux_gCm2s1,
+                     deadcoarseroot = deadcoarseroot_C_biomass_partitioning_flux_gCm2s1,
+                     root = fineroot_C_biomass_partitioning_flux_gCm2s1,
+                     grain = grain_C_biomass_partitioning_flux_gCm2s1),
+      losses = c(leaf = leaf_C_loss_flux_gCm2s1, stem = livestem_C_loss_flux_gCm2s1,
+                 reserve = if (is.null(livestem_resv_C_loss_flux_gCm2s1)) 0 else livestem_resv_C_loss_flux_gCm2s1,
+                 deadstem = deadstem_C_loss_flux_gCm2s1,
+                 livecoarseroot = livecoarseroot_C_loss_flux_gCm2s1,
+                 deadcoarseroot = deadcoarseroot_C_loss_flux_gCm2s1,
+                 root = fineroot_C_loss_flux_gCm2s1, grain = grain_C_loss_flux_gCm2s1),
+      seed_flux = if (is.null(seedC_to_leafC_flux_gCm2s1)) 0 else seedC_to_leafC_flux_gCm2s1,
+      frost_flux = leaf_frost_loss_flux_gCm2s1, carbon_state = winter_carbon_state,
+      harvesting = harvesting_flag, DVI = DVI, astem = astem))
+  }
   
     
   # Constants and parameters:
@@ -113,5 +139,75 @@ f_Cpool_budgets  = function(is_crop, is_evergreen, is_stress_decid, is_season_de
                 grain_C_new = grain_C)
   
   return(output)
+}
+
+f_winter_wheat_Cpool_budget = function(pools, allocation, losses, seed_flux,
+                                      frost_flux, carbon_state = NULL,
+                                      harvesting, DVI, astem) {
+  # Persistent litter is an accounting reservoir: TEMIR does not yet simulate
+  # soil/litter decomposition. Harvested grain is a cumulative export ledger.
+  # All incoming fluxes are gC m-2 s-1; reservoirs are gC m-2.
+  if (is.null(carbon_state)) carbon_state = list(litter_C = 0, harvested_C = 0, frost_litter_C = 0)
+  fields = c('litter_C', 'harvested_C', 'frost_litter_C')
+  if (!is.list(carbon_state) || !all(fields %in% names(carbon_state)) ||
+      any(!vapply(carbon_state[fields], function(x)
+          is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0, logical(1))))
+    stop('Invalid winter-wheat carbon accounting state')
+  if (carbon_state$frost_litter_C > carbon_state$litter_C + 1e-9)
+    stop('Winter frost litter must be a subset of total litter carbon')
+  if (!crop_transloc_scheme %in% c('CLM4.5', 'JULES'))
+    stop('Winter-wheat carbon accounting supports CLM4.5 or JULES retranslocation')
+  expected = c('leaf', 'stem', 'reserve', 'deadstem', 'livecoarseroot', 'deadcoarseroot', 'root', 'grain')
+  for (x in list(pools, allocation, losses)) {
+    if (!identical(names(x), expected) || any(!is.finite(x)) || any(x < 0))
+      stop('Winter-wheat carbon pools and fluxes must be finite nonnegative values for all eight pools')
+  }
+  if (length(seed_flux) != 1L || length(frost_flux) != 1L ||
+      any(!is.finite(c(seed_flux, frost_flux))) || min(seed_flux, frost_flux) < 0)
+    stop('Winter seed/frost fluxes must be finite and nonnegative')
+  if (harvesting && (any(allocation != 0) || seed_flux != 0))
+    stop('Winter harvest cannot coincide with positive allocation or seed input')
+  total_before = sum(pools) + carbon_state$litter_C + carbon_state$harvested_C
+  available = pools + allocation*86400
+  available['leaf'] = available['leaf'] + seed_flux*86400
+  # Harvest takes precedence, so no tissue is removed by frost twice.
+  frost_C = if (harvesting) 0 else min(frost_flux*86400, available['leaf'])
+  available['leaf'] = available['leaf'] - frost_C
+  actual_loss = if (harvesting) available else pmin(losses*86400, available)
+  updated = available - actual_loss
+  leaf_to_grain = stem_to_grain = 0
+  if (!harvesting && crop_transloc_scheme == 'JULES') {
+    transfer = f_crop_retranslocation_JULES(
+      is_maize = FALSE, is_springwheat = FALSE, is_winterwheat = TRUE,
+      is_soybean = FALSE, grainC = unname(updated['grain']), leafC = unname(updated['leaf']),
+      leafC_senesc_flux = unname(actual_loss['leaf'])/86400,
+      livestem_resvC = unname(updated['reserve']), astem = astem, DVI = DVI)
+    leaf_to_grain = if (is.na(transfer$leaf2grain_flx)) 0 else transfer$leaf2grain_flx
+    stem_to_grain = if (is.na(transfer$stem2grain_flx)) 0 else transfer$stem2grain_flx
+    updated['grain'] = transfer$grain_C
+    updated['reserve'] = transfer$livestem_resv_C
+  }
+  exported = if (harvesting) unname(actual_loss['grain']) else 0
+  litter_gain = unname(frost_C + sum(actual_loss) - leaf_to_grain - exported)
+  carbon_state$litter_C = carbon_state$litter_C + litter_gain
+  carbon_state$harvested_C = carbon_state$harvested_C + exported
+  carbon_state$frost_litter_C = carbon_state$frost_litter_C + unname(frost_C)
+  # frost_litter_C is a cumulative SUBSET of litter_C, not another reservoir.
+  balance = sum(updated) + carbon_state$litter_C + carbon_state$harvested_C -
+            total_before - sum(allocation)*86400 - seed_flux*86400
+  if (any(updated < -1e-10) || abs(balance) > 1e-9*max(1, total_before, sum(allocation)*86400))
+    stop('Winter-wheat carbon balance failed')
+  list(leaf_C_new = unname(updated['leaf']), fineroot_C_new = unname(updated['root']),
+       livecoarseroot_C_new = unname(updated['livecoarseroot']),
+       deadcoarseroot_C_new = unname(updated['deadcoarseroot']),
+       livestem_C_new = unname(updated['stem']), livestem_resv_C_new = unname(updated['reserve']),
+       deadstem_C_new = unname(updated['deadstem']), grain_C_new = unname(updated['grain']),
+       winter_carbon_state = carbon_state, litter_C_new = carbon_state$litter_C,
+       harvested_C_total = carbon_state$harvested_C,
+       leaf_frost_to_litter_flux = unname(frost_C)/86400,
+       total_litter_input_flux = litter_gain/86400,
+       harvest_grain_export_flux = exported/86400,
+       leaf_to_grain_C = leaf_to_grain, stem_to_grain_C = stem_to_grain,
+       carbon_balance_error = unname(balance))
 }
 

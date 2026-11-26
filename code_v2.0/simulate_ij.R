@@ -38,6 +38,9 @@ f_simulate_ij = function(IJ) {
     
     # Redefine new history output for temp_data for crop simulation
     if (biogeochem_flag) {
+        # Separate per-PFT state collector: loading prior-day checkpoints later
+        # in this function must not overwrite states already updated today.
+        winter_wheat_state_next = vector('list', length(pftname))
         BGC_temp_var_vec = c('LAI_PFT_hist_ijd', 'SAI_PFT_hist_ijd', 'htop_PFT_hist_ijd',
                              'leafC_PFT_hist_ijd', 
                              'livestemC_PFT_hist_ijd', 'livestemC_resv_PFT_hist_ijd', 'deadstemC_PFT_hist_ijd', 
@@ -682,6 +685,19 @@ f_simulate_ij = function(IJ) {
                 
                 ####################################################################
                 
+                # Restore winter state independently for each PFT at day start.
+                # Older checkpoints are usable for an unplanted crop; an active
+                # winter crop must not silently restart vernalization from zero.
+                if (biogeochem_flag && winterwheat_flag && h == 1) {
+                    winter_state = NULL
+                    if (!(current_date == start_date && !continue_flag) &&
+                        exists('winter_wheat_state_PFT_lasthd_ijd', inherits = FALSE)) {
+                        winter_state = winter_wheat_state_PFT_lasthd_ijd[[ipft]]
+                    }
+                    if (is.null(winter_state) && crop_live_flag)
+                        stop('Active winter wheat requires a winter-aware checkpoint; start the new scheme before planting')
+                }
+
                 # Calculate aerodynamic conductance and/or temperature and humidity profiles using Monin Obukhov theory:
                 # Now g_ah is always computed using either one of the two schemes below. (Tai, Feb 2019)
                 if (infer_canopy_met_flag | (ga_scheme == 'CLM4.5')) {
@@ -1235,7 +1251,19 @@ f_simulate_ij = function(IJ) {
                                                               hybgdd = GDDmat_max, GDD_baseT = GDD_base_T, GDD_maxIncrease = GDDT2m_change_max, max_growing_season_length = crop_season_length_max, leaf_longevity = leaflong, T_plant_req = avg_T_planting_req, T_min_plant_req = min_T_planting_req, repr_GDDfrac = repr_GDDfraction, emer_GDDfrac = emer_GDDfraction,
                                                               prescribed_min_plant_jday = ifelse(test = at_NH_flag, yes = earliest_planting_doy_NH, no = earliest_planting_doy_SH), prescribed_max_plant_jday = ifelse(test = at_NH_flag, yes = latest_planting_doy_NH, no = latest_planting_doy_SH),
                                                               at_NH_flag = at_NH_flag,
-                                                              diagnostic_location = sprintf('PFT %d at %.1f E, %.1f N', pftnum[ipft], lon[i], lat[j]))
+                                                              diagnostic_location = sprintf('PFT %d at %.1f E, %.1f N', pftnum[ipft], lon[i], lat[j]),
+                                                              winter_state = if (winterwheat_flag) winter_state else NULL,
+                                                              T_min_daily = Tmin_daily,
+                                                              T_soil_subdaily = if (winterwheat_flag) as.numeric(TSOIL1[i,j,]) else NULL,
+                                                              # Snow affects only optional snow-stress RATER,
+                                                              # never the soil-based crown temperature.
+                                                              snow_depth = if (single_site_flag && use_site_obs_flag && FLUXNET_flag) NULL else
+                                                                  if (exists('SNODP') && all(is.finite(SNODP[i,j,]))) as.numeric(SNODP[i,j,]) else NULL,
+                                                              winter_parameters = if (exists('winter_wheat_parameters')) winter_wheat_parameters else list())
+                            if (winterwheat_flag) {
+                                winter_state = crop_phenology$winter_state
+                                winter_wheat_state_next[[ipft]] = winter_state
+                            }
                             
 
                             simulateIJ_crop_phenology_variable_name = c("crop_emergence_flux", "leaf_C_loss_flux", "grain_C_loss_flux", "livestem_C_loss_flux", "livestem_resv_C_loss_flux", "fineroot_C_loss_flux",
@@ -1261,7 +1289,9 @@ f_simulate_ij = function(IJ) {
                                                                               GDDmat = GDD_mat, GDD_T2m = GDDT2m, GDD_Tsoil = GDDTsoil, GDDemer = GDD_emer, GDDrepr = GDD_repr, DVI_JULES = DVI, 
                                                                               crop_living_flag = crop_live_flag, peak_lai_flag = peak_LAI_flag, grain_filling_flag = grain_fill_flag,
                                                                               astem_leafem = a_stem_leafem, aleaf_leafem = a_leaf_leafem, aleaf = a_leaf, astem = a_stem,
-                                                                              bfact = b_factor, arooti = a_root_initial, arootf = a_root_final, astemf = a_stem_final, declfact = GDD_decline_factor, allconss = a_stem_alloc_power, aleaff = a_leaf_final, allconsl = a_leaf_alloc_power, lfemerg = emer_GDDfraction, fleafi = a_leaf_base)
+                                                                              bfact = b_factor, arooti = a_root_initial, arootf = a_root_final, astemf = a_stem_final, declfact = GDD_decline_factor, allconss = a_stem_alloc_power, aleaff = a_leaf_final, allconsl = a_leaf_alloc_power, lfemerg = emer_GDDfraction, fleafi = a_leaf_base,
+                                                                              vernalization_factor = if (winterwheat_flag) crop_phenology$vernalization_factor else 1,
+                                                                              winter_parameters = if (exists('winter_wheat_parameters')) winter_wheat_parameters else list())
                             
                             simulateIJ_crop_allocation_variable_name = c("leaf_C_alloc_flux","fineroot_C_alloc_flux","livestem_C_alloc_flux","livestem_resv_C_alloc_flux","deadstem_C_alloc_flux","livecoarseroot_C_alloc_flux","deadcoarseroot_C_alloc_flux","grain_C_alloc_flux",
                                                                          "a_stem","a_leaf","a_root","a_repr","a_stem_leafem","a_leaf_leafem")
@@ -1287,7 +1317,13 @@ f_simulate_ij = function(IJ) {
                                                               livecoarseroot_C_prev = 0, livecoarseroot_C_biomass_partitioning_flux_gCm2s1 = livecoarseroot_C_alloc_flux, livecoarseroot_C_loss_flux_gCm2s1 = 0,
                                                               deadcoarseroot_C_prev = 0, deadcoarseroot_C_biomass_partitioning_flux_gCm2s1 = deadcoarseroot_C_alloc_flux, deadcoarseroot_C_loss_flux_gCm2s1 = 0,
                                                               fineroot_C_prev = fineroot_C, fineroot_C_biomass_partitioning_flux_gCm2s1 = fineroot_C_alloc_flux, fineroot_C_loss_flux_gCm2s1 = fineroot_C_loss_flux,
-                                                              grain_C_prev = grain_C, grain_C_biomass_partitioning_flux_gCm2s1 = grain_C_alloc_flux, grain_C_loss_flux_gCm2s1 = grain_C_loss_flux)
+                                                              grain_C_prev = grain_C, grain_C_biomass_partitioning_flux_gCm2s1 = grain_C_alloc_flux, grain_C_loss_flux_gCm2s1 = grain_C_loss_flux,
+                                                              leaf_frost_loss_flux_gCm2s1 = if (winterwheat_flag) crop_phenology$leaf_frost_loss_flux else 0,
+                                                              winter_carbon_state = if (winterwheat_flag) winter_state$carbon else NULL)
+                        if (winterwheat_flag) {
+                            winter_state$carbon = plant_Cpool_budgets$winter_carbon_state
+                            winter_wheat_state_next[[ipft]] = winter_state
+                        }
                         
                         leaf_C = plant_Cpool_budgets$leaf_C_new
                         # fineroot_C = plant_Cpool_budgets$fineroot_C_new
@@ -1393,7 +1429,7 @@ f_simulate_ij = function(IJ) {
                                                         c('leafC_PFT_hist_ijd', 'plant_Cpool_budgets$leaf_C_new'),
                                                         c('finerootC_PFT_hist_ijd', 'plant_Cpool_budgets$fineroot_C_new'),
                                                         c('livestemC_PFT_hist_ijd', 'plant_Cpool_budgets$livestem_C_new'),
-                                                        c('livestemC_resv_PFT_hist_ijd', 'plant_Cpool_budgets$livestem_resv_C'),
+                                                        c('livestemC_resv_PFT_hist_ijd', 'plant_Cpool_budgets$livestem_resv_C_new'),
                                                         c('deadstemC_PFT_hist_ijd', 'plant_Cpool_budgets$deadstem_C_new'),
                                                         c('livecoarserootC_PFT_hist_ijd', 'plant_Cpool_budgets$livecoarseroot_C_new'),
                                                         c('deadcoarserootC_PFT_hist_ijd', 'plant_Cpool_budgets$deadcoarseroot_C_new'),
@@ -1409,6 +1445,17 @@ f_simulate_ij = function(IJ) {
                                                         c('deadcoarserootC_alloc_PFT_hist_ijd', paste0(alloc_prefix,'$deadcoarseroot_carbon_partitioning_flux_gCm2s1')),
                                                         c('grainC_alloc_PFT_hist_ijd', paste0(alloc_prefix,'$grain_carbon_partitioning_flux_gCm2s1')),
                                                         # Crop phenology
+                                                        c('winter_Tcrown_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$crown_temperature_C' else 'NA_real_'),
+                                                        c('winter_LT50_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$LT50' else 'NA_real_'),
+                                                        c('winter_VD_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$vernalization_days' else 'NA_real_'),
+                                                        c('winter_VF_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$vernalization_factor' else 'NA_real_'),
+                                                        c('winter_WDD_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$WDD' else 'NA_real_'),
+                                                        c('winter_survival_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$survival_probability' else 'NA_real_'),
+                                                        c('winter_snow_stress_available_PFT_hist_ijd', if (winterwheat_flag) 'crop_phenology$cold_snow_stress_available' else 'NA_real_'),
+                                                        c('leafC_frost_to_litter_PFT_hist_ijd', if (winterwheat_flag) 'plant_Cpool_budgets$leaf_frost_to_litter_flux' else '0'),
+                                                        c('winter_litter_C_PFT_hist_ijd', if (winterwheat_flag) 'plant_Cpool_budgets$litter_C_new' else 'NA_real_'),
+                                                        c('winter_harvested_C_PFT_hist_ijd', if (winterwheat_flag) 'plant_Cpool_budgets$harvested_C_total' else 'NA_real_'),
+                                                        c('winter_C_balance_error_PFT_hist_ijd', if (winterwheat_flag) 'plant_Cpool_budgets$carbon_balance_error' else 'NA_real_'),
                                                         c('GDDT2m_PFT_hist_ijd', ifelse(test = ipft < 18, yes = as.character(NA), no = 'crop_phenology$GDD_T2m')),
                                                         c('GDDTsoil_PFT_hist_ijd', ifelse(test = ipft < 18, yes = as.character(NA), no = 'crop_phenology$GDD_Tsoil')),
                                                         c('GDDmat_PFT_hist_ijd', ifelse(test = ipft < 18, yes = as.character(NA), no = 'crop_phenology$GDDmat')),
@@ -1522,6 +1569,9 @@ f_simulate_ij = function(IJ) {
     # Temporary data needed in the crop model
     if (biogeochem_flag) {
         # Physiology
+        # Saved as a list so each PFT retains dates, raw GDD, vernalization,
+        # emergence latch and five-day planting-temperature history.
+        temp_env$winter_wheat_state_PFT_lasthd_ijd = winter_wheat_state_next
         temp_env$tlai_PFT_lasthd_ijd = LAI_PFT_hist_ijd
         temp_env$tsai_PFT_lasthd_ijd = SAI_PFT_hist_ijd
         temp_env$htop_PFT_lasthd_ijd = htop_PFT_hist_ijd
